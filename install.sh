@@ -94,7 +94,7 @@ fi
 # Authenticate via webapp
 # ═════════════════════════════════════════════════════════════════════════════
 
-AUTH_PORT=$(shuf -i 49152-65535 -n 1)
+AUTH_PORT=$(jot -r 1 49152 65535)
 AUTH_TOKEN=$(openssl rand -hex 16)
 CREDS_FILE="/tmp/turnbull-mcp-creds-${AUTH_TOKEN}.json"
 
