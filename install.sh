@@ -14,6 +14,7 @@ if [[ ! -f "package.json" ]] || ! grep -q '"turnbull-mcp"' package.json 2>/dev/n
   else
     git clone https://github.com/JackHopkins/turnbull-mcp.git "$INSTALL_DIR"
   fi
+  cd "$INSTALL_DIR"
   exec "$INSTALL_DIR/install.sh"
 fi
 
