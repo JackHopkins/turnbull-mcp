@@ -1,0 +1,58 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "openrouter/openai/gpt-5-mini",
+  "share": "disabled",
+  "mcp": {
+    "turnbull": {
+      "type": "local",
+      "command": ["node", "dist/index.js"],
+      "enabled": true,
+      "environment": {
+        "DATABASE_URL": "{env:DATABASE_URL}",
+        "TARMS_SSH_HOST": "{env:TARMS_SSH_HOST}",
+        "TARMS_SSH_KEY_PATH": "{env:TARMS_SSH_KEY_PATH}",
+        "TARMS_SSH_USERNAME": "{env:TARMS_SSH_USERNAME}",
+        "TARMS_DB_USERNAME": "{env:TARMS_DB_USERNAME}",
+        "TARMS_DB_PASSWORD": "{env:TARMS_DB_PASSWORD}",
+        "TARMS_DB_NAME": "{env:TARMS_DB_NAME}",
+        "OPENROUTER_API_KEY": "{env:OPENROUTER_API_KEY}",
+        "BREVO_API_KEY": "{env:BREVO_API_KEY}"
+      }
+    },
+    "brevo_contacts": {
+      "type": "local",
+      "command": ["npx", "-y", "mcp-remote", "https://mcp.brevo.com/v1/brevo_contacts/mcp/{env:BREVO_MCP_API_KEY}"],
+      "enabled": true
+    },
+    "brevo_deals": {
+      "type": "local",
+      "command": ["npx", "-y", "mcp-remote", "https://mcp.brevo.com/v1/brevo_deals/mcp/{env:BREVO_MCP_API_KEY}"],
+      "enabled": true
+    },
+    "brevo_campaigns": {
+      "type": "local",
+      "command": ["npx", "-y", "mcp-remote", "https://mcp.brevo.com/v1/brevo_email_campaign_management/mcp/{env:BREVO_MCP_API_KEY}"],
+      "enabled": true
+    }
+  },
+  "agent": {
+    "credit-risk-analyst": {
+      "description": "Senior credit risk analyst for assessing customer risk and reviewing alerts",
+      "mode": "all",
+      "prompt": "{file:.opencode/agents/credit-risk-analyst.md}"
+    },
+    "sales-account-manager": {
+      "description": "Account manager for tracking customer relationships and transaction patterns",
+      "mode": "all",
+      "prompt": "{file:.opencode/agents/sales-account-manager.md}"
+    }
+  },
+  "instructions": [
+    ".opencode/rules/turnbull-context.md",
+    ".opencode/rules/risk-ratings.md",
+    ".opencode/rules/workflow-patterns.md"
+  ],
+  "skills": {
+    "paths": [".opencode/skills"]
+  }
+}

@@ -170,6 +170,7 @@ TARMS_DB_PASSWORD=$(read_cred TARMS_DB_PASSWORD)
 TARMS_DB_NAME=$(read_cred TARMS_DB_NAME)
 OPENROUTER_API_KEY=$(read_cred OPENROUTER_API_KEY)
 BREVO_API_KEY=$(read_cred BREVO_API_KEY)
+BREVO_MCP_API_KEY=$(read_cred BREVO_MCP_API_KEY)
 
 rm -f "$CREDS_FILE"
 
@@ -217,6 +218,7 @@ ENV_FILE="$SCRIPT_DIR/.env"
   echo "TARMS_DB_NAME=\"${TARMS_DB_NAME}\""
   echo "OPENROUTER_API_KEY=\"${OPENROUTER_API_KEY}\""
   echo "BREVO_API_KEY=\"${BREVO_API_KEY}\""
+  echo "BREVO_MCP_API_KEY=\"${BREVO_MCP_API_KEY}\""
 } > "$ENV_FILE"
 
 # ── OpenCode configs ─────────────────────────────────────────────────────────
@@ -245,6 +247,21 @@ cat > "$SCRIPT_DIR/opencode.json" << OCEOF
         "OPENROUTER_API_KEY": "${OPENROUTER_API_KEY}",
         "BREVO_API_KEY": "${BREVO_API_KEY}"
       }
+    },
+    "brevo_contacts": {
+      "type": "local",
+      "command": ["npx", "-y", "mcp-remote", "https://mcp.brevo.com/v1/brevo_contacts/mcp/${BREVO_MCP_API_KEY}"],
+      "enabled": true
+    },
+    "brevo_deals": {
+      "type": "local",
+      "command": ["npx", "-y", "mcp-remote", "https://mcp.brevo.com/v1/brevo_deals/mcp/${BREVO_MCP_API_KEY}"],
+      "enabled": true
+    },
+    "brevo_campaigns": {
+      "type": "local",
+      "command": ["npx", "-y", "mcp-remote", "https://mcp.brevo.com/v1/brevo_email_campaign_management/mcp/${BREVO_MCP_API_KEY}"],
+      "enabled": true
     }
   },
   "agent": {
@@ -292,6 +309,21 @@ cat > "$GLOBAL_CONFIG_DIR/opencode.json" << GCEOF
         "OPENROUTER_API_KEY": "${OPENROUTER_API_KEY}",
         "BREVO_API_KEY": "${BREVO_API_KEY}"
       }
+    },
+    "brevo_contacts": {
+      "type": "local",
+      "command": ["npx", "-y", "mcp-remote", "https://mcp.brevo.com/v1/brevo_contacts/mcp/${BREVO_MCP_API_KEY}"],
+      "enabled": true
+    },
+    "brevo_deals": {
+      "type": "local",
+      "command": ["npx", "-y", "mcp-remote", "https://mcp.brevo.com/v1/brevo_deals/mcp/${BREVO_MCP_API_KEY}"],
+      "enabled": true
+    },
+    "brevo_campaigns": {
+      "type": "local",
+      "command": ["npx", "-y", "mcp-remote", "https://mcp.brevo.com/v1/brevo_email_campaign_management/mcp/${BREVO_MCP_API_KEY}"],
+      "enabled": true
     }
   },
   "agent": {
