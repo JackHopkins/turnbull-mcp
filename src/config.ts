@@ -4,9 +4,21 @@ const envSchema = z.object({
   // PostgreSQL (Neon)
   DATABASE_URL: z.string().min(1),
 
-  // Database proxy (replaces SSH tunnels)
-  DB_PROXY_URL: z.string().url().optional(),
-  DB_PROXY_API_KEY: z.string().min(1).optional(),
+  // MySQL (TARMS) via SSH tunnel
+  TARMS_SSH_HOST: z.string().default("tarms.turnbull.co.uk"),
+  TARMS_SSH_KEY_PATH: z.string().optional(),
+  TARMS_SSH_USERNAME: z.string().optional(),
+  TARMS_DB_USERNAME: z.string().optional(),
+  TARMS_DB_PASSWORD: z.string().optional(),
+  TARMS_DB_NAME: z.string().default("tarms"),
+
+  // MySQL (MIS) via SSH tunnel
+  MIS_SSH_HOST: z.string().default("mis.turnbull.co.uk"),
+  MIS_SSH_KEY_PATH: z.string().optional(),
+  MIS_SSH_USERNAME: z.string().optional(),
+  MIS_DB_USERNAME: z.string().optional(),
+  MIS_DB_PASSWORD: z.string().optional(),
+  MIS_DB_NAME: z.string().default("mis"),
 
   // OpenRouter
   OPENROUTER_API_KEY: z.string().optional(),
@@ -26,9 +38,14 @@ export function getConfig(): Config {
   return _config;
 }
 
-export function hasProxyConfig(): boolean {
+export function hasTarmsConfig(): boolean {
   const cfg = getConfig();
-  return !!(cfg.DB_PROXY_URL && cfg.DB_PROXY_API_KEY);
+  return !!(cfg.TARMS_SSH_USERNAME && cfg.TARMS_DB_USERNAME && cfg.TARMS_DB_PASSWORD);
+}
+
+export function hasMisConfig(): boolean {
+  const cfg = getConfig();
+  return !!(cfg.MIS_SSH_HOST && cfg.MIS_DB_PASSWORD);
 }
 
 export function hasOpenRouterConfig(): boolean {

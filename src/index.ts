@@ -2,6 +2,8 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { allTools } from "./tools/index.js";
 import { shutdownPool } from "./connections/postgres.js";
+import { shutdownMysql } from "./connections/mysql.js";
+import { shutdownMis } from "./connections/mis-mysql.js";
 
 const server = new McpServer({
   name: "turnbull-mcp",
@@ -45,7 +47,7 @@ for (const tool of allTools) {
 
 // Graceful shutdown
 async function shutdown() {
-  await shutdownPool();
+  await Promise.all([shutdownPool(), shutdownMysql(), shutdownMis()]);
   process.exit(0);
 }
 
