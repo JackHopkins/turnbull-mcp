@@ -1,3 +1,8 @@
+---
+name: customer-deep-dive
+description: Generate a 360-degree customer view combining MIS commercial data with risk profile data including lifetime value, product affinity, contracts, KBB activity, and event history.
+---
+
 # Customer Deep Dive
 
 Generate a 360-degree customer view combining MIS commercial data with risk profile data.

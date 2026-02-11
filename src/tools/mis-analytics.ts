@@ -21,22 +21,21 @@ export const misAnalyticsTools: ToolDefinition[] = [
         MIS_ANALYTICS_TTL,
         async () => {
           const results = await misQuery(
-            `SELECT c.accountNumber, c.name AS customer_name,
+            `SELECT c.account_number, c.name AS customer_name,
                     COUNT(*) AS transaction_count,
-                    SUM(t.sales_amount) AS total_revenue,
-                    SUM(t.cogs_amount) AS total_cogs,
-                    SUM(t.sales_amount) - SUM(t.cogs_amount) AS total_margin,
-                    ROUND((SUM(t.sales_amount) - SUM(t.cogs_amount)) / NULLIF(SUM(t.sales_amount), 0) * 100, 2) AS margin_pct,
+                    SUM(t.salesAmount) AS total_revenue,
+                    SUM(t.cogsAmount) AS total_cogs,
+                    SUM(t.salesAmount) - SUM(t.cogsAmount) AS total_margin,
+                    ROUND((SUM(t.salesAmount) - SUM(t.cogsAmount)) / NULLIF(SUM(t.salesAmount), 0) * 100, 2) AS margin_pct,
                     MIN(t.transaction_date) AS first_transaction,
                     MAX(t.transaction_date) AS last_transaction,
                     TIMESTAMPDIFF(MONTH, MIN(t.transaction_date), MAX(t.transaction_date)) AS tenure_months,
-                    ROUND(SUM(t.sales_amount) / NULLIF(TIMESTAMPDIFF(MONTH, MIN(t.transaction_date), MAX(t.transaction_date)), 0), 2) AS monthly_avg_revenue
-             FROM transaction t
+                    ROUND(SUM(t.salesAmount) / NULLIF(TIMESTAMPDIFF(MONTH, MIN(t.transaction_date), MAX(t.transaction_date)), 0), 2) AS monthly_avg_revenue
+             FROM transactions t
              JOIN customer c ON t.customer = c.id
-             WHERE c.accountNumber = ?
+             WHERE c.account_number = ?
                AND t.transactionType = 'SL'
-               AND t.ignoreTransaction = FALSE
-             GROUP BY c.accountNumber, c.name`,
+             GROUP BY c.account_number, c.name`,
             [accountNumber]
           );
           return results[0] || null;
@@ -67,20 +66,19 @@ export const misAnalyticsTools: ToolDefinition[] = [
         MIS_ANALYTICS_TTL,
         async () => {
           return misQuery(
-            `SELECT t.product_code,
+            `SELECT p.product_code,
                     p.description AS product_description,
-                    p.pac2, p.pac3,
+                    t.pac2, t.pac3,
                     COUNT(*) AS purchase_count,
-                    SUM(t.sales_amount) AS total_revenue,
-                    SUM(t.quantity) AS total_quantity,
+                    SUM(t.salesAmount) AS total_revenue,
+                    SUM(CAST(t.quantity AS DECIMAL(10,2))) AS total_quantity,
                     MAX(t.transaction_date) AS last_purchased
-             FROM transaction t
+             FROM transactions t
              JOIN customer c ON t.customer = c.id
-             LEFT JOIN product p ON t.product_code = p.productCode
-             WHERE c.accountNumber = ?
+             LEFT JOIN pricebook p ON t.product = p.id
+             WHERE c.account_number = ?
                AND t.transactionType = 'SL'
-               AND t.ignoreTransaction = FALSE
-             GROUP BY t.product_code, p.description, p.pac2, p.pac3
+             GROUP BY p.product_code, p.description, t.pac2, t.pac3
              ORDER BY total_revenue DESC
              LIMIT ?`,
             [accountNumber, limit]
@@ -111,18 +109,17 @@ export const misAnalyticsTools: ToolDefinition[] = [
             `SELECT b.name AS branchName,
                     COUNT(*) AS transaction_count,
                     COUNT(DISTINCT c.id) AS customer_count,
-                    SUM(t.sales_amount) AS total_revenue,
-                    SUM(t.cogs_amount) AS total_cogs,
-                    SUM(t.sales_amount) - SUM(t.cogs_amount) AS gross_margin,
-                    ROUND((SUM(t.sales_amount) - SUM(t.cogs_amount)) / NULLIF(SUM(t.sales_amount), 0) * 100, 2) AS margin_pct,
-                    ROUND(SUM(t.sales_amount) / NULLIF(COUNT(DISTINCT t.invoice_number), 0), 2) AS avg_order_value
-             FROM transaction t
+                    SUM(t.salesAmount) AS total_revenue,
+                    SUM(t.cogsAmount) AS total_cogs,
+                    SUM(t.salesAmount) - SUM(t.cogsAmount) AS gross_margin,
+                    ROUND((SUM(t.salesAmount) - SUM(t.cogsAmount)) / NULLIF(SUM(t.salesAmount), 0) * 100, 2) AS margin_pct,
+                    ROUND(SUM(t.salesAmount) / NULLIF(COUNT(DISTINCT t.invoice_number), 0), 2) AS avg_order_value
+             FROM transactions t
              JOIN customer c ON t.customer = c.id
-             JOIN branch b ON c.branch = b.id
+             JOIN branch b ON t.branch = b.id
              WHERE t.transaction_date >= ?
                AND t.transaction_date <= ?
                AND t.transactionType = 'SL'
-               AND t.ignoreTransaction = FALSE
              GROUP BY b.name
              ORDER BY total_revenue DESC`,
             [startDate, endDate]
@@ -155,7 +152,6 @@ export const misAnalyticsTools: ToolDefinition[] = [
             "t.transaction_date >= ?",
             "t.transaction_date <= ?",
             "t.transactionType = 'SL'",
-            "t.ignoreTransaction = FALSE",
           ];
           const queryParams: any[] = [startDate, endDate];
 
@@ -165,19 +161,19 @@ export const misAnalyticsTools: ToolDefinition[] = [
           }
 
           return misQuery(
-            `SELECT r.id AS repId, r.name AS repName,
+            `SELECT r.id AS repId, r.fullname AS repName,
                     b.name AS branchName,
                     COUNT(*) AS transaction_count,
                     COUNT(DISTINCT c.id) AS customer_count,
-                    SUM(t.sales_amount) AS total_revenue,
-                    SUM(t.sales_amount) - SUM(t.cogs_amount) AS gross_margin,
-                    ROUND(SUM(t.sales_amount) / NULLIF(COUNT(DISTINCT t.invoice_number), 0), 2) AS avg_order_value
-             FROM transaction t
+                    SUM(t.salesAmount) AS total_revenue,
+                    SUM(t.salesAmount) - SUM(t.cogsAmount) AS gross_margin,
+                    ROUND(SUM(t.salesAmount) / NULLIF(COUNT(DISTINCT t.invoice_number), 0), 2) AS avg_order_value
+             FROM transactions t
              JOIN customer c ON t.customer = c.id
-             JOIN rep r ON c.rep = r.id
-             LEFT JOIN branch b ON c.branch = b.id
+             JOIN repDetails r ON c.rep = r.id
+             LEFT JOIN branch b ON t.branch = b.id
              WHERE ${conditions.join(" AND ")}
-             GROUP BY r.id, r.name, b.name
+             GROUP BY r.id, r.fullname, b.name
              ORDER BY total_revenue DESC`,
             queryParams
           );
@@ -213,16 +209,16 @@ export const misAnalyticsTools: ToolDefinition[] = [
             {
               product: {
                 select:
-                  "t.product_code, p.description AS product_description",
-                group: "t.product_code, p.description",
+                  "p.product_code, p.description AS product_description",
+                group: "p.product_code, p.description",
               },
               pac2: {
-                select: "p.pac2 AS category",
-                group: "p.pac2",
+                select: "t.pac2 AS category",
+                group: "t.pac2",
               },
               pac3: {
-                select: "p.pac3 AS category",
-                group: "p.pac3",
+                select: "t.pac3 AS category",
+                group: "t.pac3",
               },
               supplier: {
                 select: "s.name AS supplierName",
@@ -235,17 +231,16 @@ export const misAnalyticsTools: ToolDefinition[] = [
           return misQuery(
             `SELECT ${g.select},
                     COUNT(*) AS transaction_count,
-                    SUM(t.sales_amount) AS total_revenue,
-                    SUM(t.cogs_amount) AS total_cogs,
-                    SUM(t.sales_amount) - SUM(t.cogs_amount) AS gross_margin,
-                    ROUND((SUM(t.sales_amount) - SUM(t.cogs_amount)) / NULLIF(SUM(t.sales_amount), 0) * 100, 2) AS margin_pct
-             FROM transaction t
-             LEFT JOIN product p ON t.product_code = p.productCode
+                    SUM(t.salesAmount) AS total_revenue,
+                    SUM(t.cogsAmount) AS total_cogs,
+                    SUM(t.salesAmount) - SUM(t.cogsAmount) AS gross_margin,
+                    ROUND((SUM(t.salesAmount) - SUM(t.cogsAmount)) / NULLIF(SUM(t.salesAmount), 0) * 100, 2) AS margin_pct
+             FROM transactions t
+             LEFT JOIN pricebook p ON t.product = p.id
              LEFT JOIN supplier s ON p.supplier = s.id
              WHERE t.transaction_date >= ?
                AND t.transaction_date <= ?
                AND t.transactionType = 'SL'
-               AND t.ignoreTransaction = FALSE
              GROUP BY ${g.group}
              ORDER BY gross_margin DESC
              LIMIT ?`,
@@ -258,7 +253,7 @@ export const misAnalyticsTools: ToolDefinition[] = [
   {
     name: "mis_brevo_sync_status",
     description:
-      "Check Brevo CRM sync health: transaction tracking status, last sync times, and any sync errors.",
+      "Check Brevo CRM sync health: which transactions and customers have been tracked in Brevo.",
     inputSchema: z.object({
       limit: z.number().optional().default(100).describe("Maximum results"),
     }),
@@ -269,15 +264,31 @@ export const misAnalyticsTools: ToolDefinition[] = [
         { limit },
         MIS_ANALYTICS_TTL,
         async () => {
-          return misQuery(
-            `SELECT bs.id, bs.entityType, bs.entityId,
-                    bs.syncStatus, bs.lastSyncAt, bs.errorMessage,
-                    bs.retryCount
-             FROM brevo_sync_log bs
-             ORDER BY bs.lastSyncAt DESC
+          const transactionTrack = await misQuery(
+            `SELECT COUNT(*) AS tracked_transactions
+             FROM brevoTransactionTrack`,
+            []
+          );
+          const customerTrack = await misQuery(
+            `SELECT COUNT(*) AS tracked_customers
+             FROM brevoCustomerTrack`,
+            []
+          );
+          const recentHistory = await misQuery(
+            `SELECT bh.id, bh.webhookType, bh.sender, bh.recipient,
+                    bh.message, bh.created,
+                    c.account_number, c.name AS customer_name
+             FROM brevoHistory bh
+             LEFT JOIN customer c ON bh.customer = c.id
+             ORDER BY bh.created DESC
              LIMIT ?`,
             [limit]
           );
+          return {
+            trackedTransactions: transactionTrack[0]?.tracked_transactions || 0,
+            trackedCustomers: customerTrack[0]?.tracked_customers || 0,
+            recentActivity: recentHistory,
+          };
         }
       );
     },

@@ -45,6 +45,7 @@ async function setupTunnel(): Promise<void> {
         host: config.TARMS_SSH_HOST,
         port: 22,
         username: config.TARMS_SSH_USERNAME!,
+        readyTimeout: 10000,
       };
 
       if (config.TARMS_SSH_KEY_PATH) {

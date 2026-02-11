@@ -7,14 +7,17 @@ export async function getEventsList(
   const archivedClause = includeArchived ? "" : "WHERE e.archived = 0";
 
   return misQuery(
-    `SELECT e.id, e.name, e.description, e.eventType,
-            e.startDate, e.endDate, e.archived,
-            COUNT(DISTINCT er.id) AS registration_count
-     FROM event e
-     LEFT JOIN event_registration er ON er.event = e.id
+    `SELECT e.id, e.title, e.notes AS description, e.eventLevel,
+            e.EventDate, e.promoStartDate, e.promoEndDate,
+            e.deposit, e.defaultTarget, e.maximumGuests,
+            e.tracking, e.rewardsEvent, e.rewardRate,
+            e.archived, e.costPerHead,
+            COUNT(DISTINCT ec.id) AS registration_count
+     FROM events e
+     LEFT JOIN eventContacts ec ON ec.event = e.id
      ${archivedClause}
-     GROUP BY e.id, e.name, e.description, e.eventType, e.startDate, e.endDate, e.archived
-     ORDER BY e.startDate DESC
+     GROUP BY e.id
+     ORDER BY e.EventDate DESC
      LIMIT ?`,
     [limit]
   );
@@ -24,53 +27,55 @@ export async function getEventRegistrations(
   eventId: number,
   includeTargets: boolean = true
 ) {
-  const targetClause = includeTargets ? "" : "AND er.registrationType != 'target'";
-
   return misQuery(
-    `SELECT er.id, er.registrationType, er.registeredAt, er.status,
-            co.firstName, co.lastName, co.email, co.telephone,
-            c.accountNumber, c.name AS customer_name
-     FROM event_registration er
-     LEFT JOIN contact co ON er.contact = co.id
-     LEFT JOIN customer c ON er.customer = c.id
-     WHERE er.event = ?
-       ${targetClause}
-     ORDER BY er.registeredAt DESC`,
+    `SELECT ec.id, ec.attending, ec.target, ec.kickstart,
+            ec.depositPaid, ec.attendanceState,
+            ec.promoStartDate, ec.promoEndDate,
+            ec.notes, ec.created,
+            co.firstName, co.lastName, co.fullName, co.email, co.phone,
+            c.account_number, c.name AS customer_name
+     FROM eventContacts ec
+     LEFT JOIN contactDetails co ON ec.contact = co.id
+     LEFT JOIN eventContactCustomers ecc ON ecc.eventContact = ec.id
+     LEFT JOIN customer c ON ecc.customer = c.id
+     WHERE ec.event = ?
+     ORDER BY ec.created DESC`,
     [eventId]
   );
 }
 
 export async function getCustomerEvents(accountNumber: string) {
   return misQuery(
-    `SELECT e.id, e.name, e.eventType, e.startDate, e.endDate,
-            er.registrationType, er.registeredAt, er.status
-     FROM event_registration er
-     JOIN event e ON er.event = e.id
-     JOIN customer c ON er.customer = c.id
-     WHERE c.accountNumber = ?
-     ORDER BY e.startDate DESC`,
+    `SELECT e.id, e.title, e.eventLevel, e.EventDate,
+            e.promoStartDate, e.promoEndDate,
+            ec.attending, ec.depositPaid, ec.attendanceState, ec.created AS registeredAt
+     FROM eventContacts ec
+     JOIN events e ON ec.event = e.id
+     JOIN eventContactCustomers ecc ON ecc.eventContact = ec.id
+     JOIN customer c ON ecc.customer = c.id
+     WHERE c.account_number = ?
+     ORDER BY e.EventDate DESC`,
     [accountNumber]
   );
 }
 
 export async function getEventRewards(eventId: number, status: string = "all") {
-  const statusClause =
-    status === "all" ? "" : "AND rw.status = ?";
-  const params: any[] = [eventId];
-  if (status !== "all") params.push(status);
-
+  // rewardDetail links via eventContact FK
+  // status filter maps to: redemption state on eventContactRedemption if needed
   return misQuery(
-    `SELECT rw.id, rw.rewardAmount, rw.calculatedAmount, rw.status,
-            rw.paidDate, rw.calculatedAt,
-            c.accountNumber, c.name AS customer_name,
-            co.firstName, co.lastName
-     FROM event_reward rw
-     LEFT JOIN customer c ON rw.customer = c.id
-     LEFT JOIN contact co ON rw.contact = co.id
-     WHERE rw.event = ?
-       ${statusClause}
-     ORDER BY rw.calculatedAmount DESC`,
-    params
+    `SELECT rd.id, rd.rewardTotal, rd.dealTotal, rd.clearedRewardTotal,
+            rd.rewardDate,
+            ec.id AS eventContactId, ec.attending, ec.target,
+            co.firstName, co.lastName, co.fullName,
+            c.account_number, c.name AS customer_name
+     FROM rewardDetail rd
+     JOIN eventContacts ec ON rd.eventContact = ec.id
+     LEFT JOIN contactDetails co ON ec.contact = co.id
+     LEFT JOIN eventContactCustomers ecc ON ecc.eventContact = ec.id
+     LEFT JOIN customer c ON ecc.customer = c.id
+     WHERE ec.event = ?
+     ORDER BY rd.rewardTotal DESC`,
+    [eventId]
   );
 }
 
@@ -84,19 +89,19 @@ export async function getEventRedemptions(
   const params: any[] = [];
 
   if (eventId) {
-    conditions.push("rd.event = ?");
+    conditions.push("ec.event = ?");
     params.push(eventId);
   }
   if (contactId) {
-    conditions.push("rd.contact = ?");
+    conditions.push("ec.contact = ?");
     params.push(contactId);
   }
   if (startDate) {
-    conditions.push("rd.redeemedAt >= ?");
+    conditions.push("ecr.requested >= ?");
     params.push(startDate);
   }
   if (endDate) {
-    conditions.push("rd.redeemedAt <= ?");
+    conditions.push("ecr.requested <= ?");
     params.push(endDate);
   }
 
@@ -104,17 +109,19 @@ export async function getEventRedemptions(
     conditions.length > 0 ? "WHERE " + conditions.join(" AND ") : "";
 
   return misQuery(
-    `SELECT rd.id, rd.amount, rd.redeemedAt, rd.method,
-            rd.reference, rd.status,
-            e.name AS eventName,
-            co.firstName, co.lastName,
-            c.accountNumber, c.name AS customer_name
-     FROM event_redemption rd
-     LEFT JOIN event e ON rd.event = e.id
-     LEFT JOIN contact co ON rd.contact = co.id
-     LEFT JOIN customer c ON rd.customer = c.id
+    `SELECT ecr.id, ecr.amount, ecr.redemptionState, ecr.redemptionType,
+            ecr.requested, ecr.processed,
+            e.title AS eventTitle,
+            co.firstName, co.lastName, co.fullName,
+            c.account_number, c.name AS customer_name
+     FROM eventContactRedemption ecr
+     JOIN eventContacts ec ON ecr.eventContact = ec.id
+     LEFT JOIN events e ON ec.event = e.id
+     LEFT JOIN contactDetails co ON ec.contact = co.id
+     LEFT JOIN eventContactCustomers ecc ON ecc.eventContact = ec.id
+     LEFT JOIN customer c ON ecc.customer = c.id
      ${whereClause}
-     ORDER BY rd.redeemedAt DESC`,
+     ORDER BY ecr.requested DESC`,
     params
   );
 }

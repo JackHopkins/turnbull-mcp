@@ -48,6 +48,7 @@ async function setupTunnel(): Promise<void> {
         host: config.MIS_SSH_HOST,
         port: 22,
         username: config.MIS_SSH_USERNAME || "turnbull",
+        readyTimeout: 10000,
       };
 
       if (sshKeyPath) {

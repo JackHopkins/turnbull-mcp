@@ -1,3 +1,8 @@
+---
+name: branch-report
+description: Generate a comprehensive branch performance dashboard with revenue, rep leaderboard, KBB pipeline, top products, and team composition.
+---
+
 # Branch Report
 
 Generate a comprehensive branch performance dashboard.

@@ -1,3 +1,8 @@
+---
+name: designer-review
+description: Generate a KBB designer performance scorecard with targets vs actuals, conversion rates, revenue, and lost job analysis.
+---
+
 # Designer Review
 
 Generate a KBB designer performance scorecard.

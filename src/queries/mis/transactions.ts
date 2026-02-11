@@ -6,7 +6,7 @@ export async function getTransactions(
   endDate?: string,
   limit: number = 500
 ) {
-  const conditions = ["c.accountNumber = ?"];
+  const conditions = ["c.account_number = ?"];
   const params: any[] = [accountNumber];
 
   if (startDate) {
@@ -21,15 +21,17 @@ export async function getTransactions(
   params.push(limit);
 
   return misQuery(
-    `SELECT t.id, t.invoice_number, t.transaction_date, t.transaction_period,
-            t.transactionType, t.sales_amount, t.cogs_amount,
-            t.product_code, t.quantity, t.branch,
-            c.name AS customer_name, c.accountNumber
-     FROM transaction t
+    `SELECT t.magicNumber, t.invoice_number, t.transaction_date, t.transaction_period,
+            t.transactionType, t.salesAmount, t.cogsAmount,
+            p.product_code, t.quantity, t.order_number, t.order_category,
+            c.name AS customer_name, c.account_number,
+            b.name AS branchName
+     FROM transactions t
      JOIN customer c ON t.customer = c.id
+     LEFT JOIN pricebook p ON t.product = p.id
+     LEFT JOIN branch b ON t.branch = b.id
      WHERE ${conditions.join(" AND ")}
        AND t.transactionType = 'SL'
-       AND t.ignoreTransaction = FALSE
      ORDER BY t.transaction_date DESC
      LIMIT ?`,
     params
@@ -42,7 +44,7 @@ export async function getTransactionsByProduct(
   endDate?: string,
   limit: number = 1000
 ) {
-  const conditions = ["t.product_code = ?"];
+  const conditions = ["p.product_code = ?"];
   const params: any[] = [productCode];
 
   if (startDate) {
@@ -57,14 +59,17 @@ export async function getTransactionsByProduct(
   params.push(limit);
 
   return misQuery(
-    `SELECT t.id, t.invoice_number, t.transaction_date,
-            t.sales_amount, t.cogs_amount, t.quantity, t.branch,
-            c.name AS customer_name, c.accountNumber
-     FROM transaction t
+    `SELECT t.magicNumber, t.invoice_number, t.transaction_date,
+            t.salesAmount, t.cogsAmount, t.quantity,
+            p.product_code,
+            c.name AS customer_name, c.account_number,
+            b.name AS branchName
+     FROM transactions t
      JOIN customer c ON t.customer = c.id
+     LEFT JOIN pricebook p ON t.product = p.id
+     LEFT JOIN branch b ON t.branch = b.id
      WHERE ${conditions.join(" AND ")}
        AND t.transactionType = 'SL'
-       AND t.ignoreTransaction = FALSE
      ORDER BY t.transaction_date DESC
      LIMIT ?`,
     params
@@ -78,17 +83,18 @@ export async function getTransactionsByBranch(
   limit: number = 5000
 ) {
   return misQuery(
-    `SELECT t.id, t.invoice_number, t.transaction_date,
-            t.sales_amount, t.cogs_amount, t.product_code, t.quantity,
-            c.name AS customer_name, c.accountNumber
-     FROM transaction t
+    `SELECT t.magicNumber, t.invoice_number, t.transaction_date,
+            t.salesAmount, t.cogsAmount, t.quantity,
+            p.product_code,
+            c.name AS customer_name, c.account_number
+     FROM transactions t
      JOIN customer c ON t.customer = c.id
-     JOIN branch b ON c.branch = b.id
+     JOIN branch b ON t.branch = b.id
+     LEFT JOIN pricebook p ON t.product = p.id
      WHERE b.name = ?
        AND t.transaction_date >= ?
        AND t.transaction_date <= ?
        AND t.transactionType = 'SL'
-       AND t.ignoreTransaction = FALSE
      ORDER BY t.transaction_date DESC
      LIMIT ?`,
     [branchName, startDate, endDate, limit]
@@ -101,16 +107,17 @@ export async function getTransactionsByRep(
   endDate: string
 ) {
   return misQuery(
-    `SELECT t.id, t.invoice_number, t.transaction_date,
-            t.sales_amount, t.cogs_amount, t.product_code, t.quantity,
-            c.name AS customer_name, c.accountNumber
-     FROM transaction t
+    `SELECT t.magicNumber, t.invoice_number, t.transaction_date,
+            t.salesAmount, t.cogsAmount, t.quantity,
+            p.product_code,
+            c.name AS customer_name, c.account_number
+     FROM transactions t
      JOIN customer c ON t.customer = c.id
+     LEFT JOIN pricebook p ON t.product = p.id
      WHERE c.rep = ?
        AND t.transaction_date >= ?
        AND t.transaction_date <= ?
        AND t.transactionType = 'SL'
-       AND t.ignoreTransaction = FALSE
      ORDER BY t.transaction_date DESC`,
     [repId, startDate, endDate]
   );
@@ -132,17 +139,16 @@ export async function getSalesSummary(
   return misQuery(
     `SELECT ${groupExpr} AS period,
             COUNT(*) AS transaction_count,
-            SUM(t.sales_amount) AS total_sales,
-            SUM(t.cogs_amount) AS total_cogs,
-            SUM(t.sales_amount) - SUM(t.cogs_amount) AS gross_margin,
-            ROUND((SUM(t.sales_amount) - SUM(t.cogs_amount)) / NULLIF(SUM(t.sales_amount), 0) * 100, 2) AS margin_pct
-     FROM transaction t
+            SUM(t.salesAmount) AS total_sales,
+            SUM(t.cogsAmount) AS total_cogs,
+            SUM(t.salesAmount) - SUM(t.cogsAmount) AS gross_margin,
+            ROUND((SUM(t.salesAmount) - SUM(t.cogsAmount)) / NULLIF(SUM(t.salesAmount), 0) * 100, 2) AS margin_pct
+     FROM transactions t
      JOIN customer c ON t.customer = c.id
-     WHERE c.accountNumber = ?
+     WHERE c.account_number = ?
        AND t.transaction_date >= ?
        AND t.transaction_date <= ?
        AND t.transactionType = 'SL'
-       AND t.ignoreTransaction = FALSE
      GROUP BY period
      ORDER BY period DESC`,
     [accountNumber, startDate, endDate]
@@ -165,8 +171,8 @@ export async function getBranchSalesSummary(
       select: "DATE_FORMAT(t.transaction_date, '%Y-%m') AS period",
     },
     product: {
-      expr: "t.product_code",
-      select: "t.product_code AS period",
+      expr: "p.product_code",
+      select: "p.product_code AS period",
     },
   };
   const group = groupBy ? groupByMap[groupBy] : undefined;
@@ -176,17 +182,17 @@ export async function getBranchSalesSummary(
       `SELECT ${group.select},
               COUNT(*) AS transaction_count,
               COUNT(DISTINCT c.id) AS customer_count,
-              SUM(t.sales_amount) AS total_sales,
-              SUM(t.cogs_amount) AS total_cogs,
-              SUM(t.sales_amount) - SUM(t.cogs_amount) AS gross_margin
-       FROM transaction t
+              SUM(t.salesAmount) AS total_sales,
+              SUM(t.cogsAmount) AS total_cogs,
+              SUM(t.salesAmount) - SUM(t.cogsAmount) AS gross_margin
+       FROM transactions t
        JOIN customer c ON t.customer = c.id
-       JOIN branch b ON c.branch = b.id
+       JOIN branch b ON t.branch = b.id
+       LEFT JOIN pricebook p ON t.product = p.id
        WHERE b.name = ?
          AND t.transaction_date >= ?
          AND t.transaction_date <= ?
          AND t.transactionType = 'SL'
-         AND t.ignoreTransaction = FALSE
        GROUP BY ${group.expr}
        ORDER BY period DESC`,
       [branchName, startDate, endDate]
@@ -196,18 +202,17 @@ export async function getBranchSalesSummary(
   return misQuery(
     `SELECT COUNT(*) AS transaction_count,
             COUNT(DISTINCT c.id) AS customer_count,
-            SUM(t.sales_amount) AS total_sales,
-            SUM(t.cogs_amount) AS total_cogs,
-            SUM(t.sales_amount) - SUM(t.cogs_amount) AS gross_margin,
-            ROUND((SUM(t.sales_amount) - SUM(t.cogs_amount)) / NULLIF(SUM(t.sales_amount), 0) * 100, 2) AS margin_pct
-     FROM transaction t
+            SUM(t.salesAmount) AS total_sales,
+            SUM(t.cogsAmount) AS total_cogs,
+            SUM(t.salesAmount) - SUM(t.cogsAmount) AS gross_margin,
+            ROUND((SUM(t.salesAmount) - SUM(t.cogsAmount)) / NULLIF(SUM(t.salesAmount), 0) * 100, 2) AS margin_pct
+     FROM transactions t
      JOIN customer c ON t.customer = c.id
-     JOIN branch b ON c.branch = b.id
+     JOIN branch b ON t.branch = b.id
      WHERE b.name = ?
        AND t.transaction_date >= ?
        AND t.transaction_date <= ?
-       AND t.transactionType = 'SL'
-       AND t.ignoreTransaction = FALSE`,
+       AND t.transactionType = 'SL'`,
     [branchName, startDate, endDate]
   );
 }
@@ -220,17 +225,16 @@ export async function getRepSalesSummary(
   return misQuery(
     `SELECT COUNT(*) AS transaction_count,
             COUNT(DISTINCT c.id) AS customer_count,
-            SUM(t.sales_amount) AS total_sales,
-            SUM(t.cogs_amount) AS total_cogs,
-            SUM(t.sales_amount) - SUM(t.cogs_amount) AS gross_margin,
-            ROUND(SUM(t.sales_amount) / NULLIF(COUNT(DISTINCT t.invoice_number), 0), 2) AS avg_order_value
-     FROM transaction t
+            SUM(t.salesAmount) AS total_sales,
+            SUM(t.cogsAmount) AS total_cogs,
+            SUM(t.salesAmount) - SUM(t.cogsAmount) AS gross_margin,
+            ROUND(SUM(t.salesAmount) / NULLIF(COUNT(DISTINCT t.invoice_number), 0), 2) AS avg_order_value
+     FROM transactions t
      JOIN customer c ON t.customer = c.id
      WHERE c.rep = ?
        AND t.transaction_date >= ?
        AND t.transaction_date <= ?
-       AND t.transactionType = 'SL'
-       AND t.ignoreTransaction = FALSE`,
+       AND t.transactionType = 'SL'`,
     [repId, startDate, endDate]
   );
 }
@@ -246,7 +250,6 @@ export async function getTopCustomers(
     "t.transaction_date >= ?",
     "t.transaction_date <= ?",
     "t.transactionType = 'SL'",
-    "t.ignoreTransaction = FALSE",
   ];
   const params: any[] = [startDate, endDate];
 
@@ -261,17 +264,17 @@ export async function getTopCustomers(
   params.push(limit);
 
   return misQuery(
-    `SELECT c.accountNumber, c.name AS customer_name,
-            SUM(t.sales_amount) AS total_revenue,
-            SUM(t.cogs_amount) AS total_cogs,
-            SUM(t.sales_amount) - SUM(t.cogs_amount) AS gross_margin,
+    `SELECT c.account_number, c.name AS customer_name,
+            SUM(t.salesAmount) AS total_revenue,
+            SUM(t.cogsAmount) AS total_cogs,
+            SUM(t.salesAmount) - SUM(t.cogsAmount) AS gross_margin,
             COUNT(*) AS transaction_count,
             b.name AS branchName
-     FROM transaction t
+     FROM transactions t
      JOIN customer c ON t.customer = c.id
-     LEFT JOIN branch b ON c.branch = b.id
+     LEFT JOIN branch b ON t.branch = b.id
      WHERE ${conditions.join(" AND ")}
-     GROUP BY c.id, c.accountNumber, c.name, b.name
+     GROUP BY c.id, c.account_number, c.name, b.name
      ORDER BY total_revenue DESC
      LIMIT ?`,
     params
@@ -289,12 +292,11 @@ export async function getTopProducts(
     "t.transaction_date >= ?",
     "t.transaction_date <= ?",
     "t.transactionType = 'SL'",
-    "t.ignoreTransaction = FALSE",
   ];
   const params: any[] = [startDate, endDate];
 
   if (accountNumber) {
-    conditions.push("c.accountNumber = ?");
+    conditions.push("c.account_number = ?");
     params.push(accountNumber);
   }
   if (branchName) {
@@ -304,17 +306,18 @@ export async function getTopProducts(
   params.push(limit);
 
   return misQuery(
-    `SELECT t.product_code,
-            SUM(t.sales_amount) AS total_revenue,
-            SUM(t.cogs_amount) AS total_cogs,
-            SUM(t.sales_amount) - SUM(t.cogs_amount) AS gross_margin,
-            SUM(t.quantity) AS total_quantity,
+    `SELECT p.product_code, p.description AS product_description,
+            SUM(t.salesAmount) AS total_revenue,
+            SUM(t.cogsAmount) AS total_cogs,
+            SUM(t.salesAmount) - SUM(t.cogsAmount) AS gross_margin,
+            SUM(CAST(t.quantity AS DECIMAL(10,2))) AS total_quantity,
             COUNT(DISTINCT c.id) AS customer_count
-     FROM transaction t
+     FROM transactions t
      JOIN customer c ON t.customer = c.id
-     LEFT JOIN branch b ON c.branch = b.id
+     LEFT JOIN branch b ON t.branch = b.id
+     LEFT JOIN pricebook p ON t.product = p.id
      WHERE ${conditions.join(" AND ")}
-     GROUP BY t.product_code
+     GROUP BY p.product_code, p.description
      ORDER BY total_revenue DESC
      LIMIT ?`,
     params
@@ -339,12 +342,11 @@ export async function getSalesTrends(
     "t.transaction_date >= ?",
     "t.transaction_date <= ?",
     "t.transactionType = 'SL'",
-    "t.ignoreTransaction = FALSE",
   ];
   const params: any[] = [startDate, endDate];
 
   if (accountNumber) {
-    conditions.push("c.accountNumber = ?");
+    conditions.push("c.account_number = ?");
     params.push(accountNumber);
   }
   if (branchName) {
@@ -354,13 +356,13 @@ export async function getSalesTrends(
 
   return misQuery(
     `SELECT ${dateExpr} AS period,
-            SUM(t.sales_amount) AS revenue,
-            SUM(t.quantity) AS volume,
+            SUM(t.salesAmount) AS revenue,
+            SUM(CAST(t.quantity AS DECIMAL(10,2))) AS volume,
             COUNT(*) AS transaction_count,
             COUNT(DISTINCT c.id) AS customer_count
-     FROM transaction t
+     FROM transactions t
      JOIN customer c ON t.customer = c.id
-     LEFT JOIN branch b ON c.branch = b.id
+     LEFT JOIN branch b ON t.branch = b.id
      WHERE ${conditions.join(" AND ")}
      GROUP BY period
      ORDER BY period ASC`,

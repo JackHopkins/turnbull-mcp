@@ -1,3 +1,8 @@
+---
+name: product-analysis
+description: Analyze product performance including revenue, margin, customer adoption, top buyers, and monthly sales trends.
+---
+
 # Product Analysis
 
 Analyze product performance including revenue, margin, and customer adoption.

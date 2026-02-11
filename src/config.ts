@@ -45,7 +45,7 @@ export function hasTarmsConfig(): boolean {
 
 export function hasMisConfig(): boolean {
   const cfg = getConfig();
-  return !!(cfg.MIS_SSH_HOST);
+  return !!(cfg.MIS_SSH_HOST && cfg.MIS_DB_PASSWORD);
 }
 
 export function hasOpenRouterConfig(): boolean {

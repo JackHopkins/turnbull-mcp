@@ -1,3 +1,8 @@
+---
+name: contract-renewals
+description: Generate a contract renewal pipeline report showing expiring contracts with customer details, revenue history, and risk flags.
+---
+
 # Contract Renewals
 
 Generate a contract renewal pipeline report with risk flags.

@@ -1,3 +1,8 @@
+---
+name: event-roi
+description: Analyze event return on investment including registration rates, reward payouts, revenue uplift for registered customers, and ROI calculations.
+---
+
 # Event ROI
 
 Analyze event return on investment including revenue lift, registration rates, and reward payouts.

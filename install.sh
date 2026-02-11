@@ -180,9 +180,51 @@ BREVO_MCP_API_KEY=$(read_cred BREVO_MCP_API_KEY)
 
 rm -f "$CREDS_FILE"
 
-if [[ -z "$OPENROUTER_API_KEY" ]]; then
-  err "No OPENROUTER_API_KEY received. Ensure it is configured on the server."
+# ── Validate credentials ─────────────────────────────────────────────────────
+HAS_WARNINGS=0
+
+# Required — installer cannot continue without these
+if [[ -z "$DATABASE_URL" ]]; then
+  err "DATABASE_URL not received — PostgreSQL risk database will not work"
   exit 1
+fi
+if [[ -z "$OPENROUTER_API_KEY" ]]; then
+  err "OPENROUTER_API_KEY not received — LLM will not function"
+  exit 1
+fi
+
+# TARMS (Kerridge ERP)
+TARMS_MISSING=()
+[[ -z "$TARMS_SSH_HOST" ]]     && TARMS_MISSING+=("TARMS_SSH_HOST")
+[[ -z "$TARMS_SSH_USERNAME" ]] && TARMS_MISSING+=("TARMS_SSH_USERNAME")
+[[ -z "$TARMS_DB_USERNAME" ]]  && TARMS_MISSING+=("TARMS_DB_USERNAME")
+[[ -z "$TARMS_DB_PASSWORD" ]]  && TARMS_MISSING+=("TARMS_DB_PASSWORD")
+if [[ ${#TARMS_MISSING[@]} -gt 0 ]]; then
+  warn "TARMS credentials incomplete — missing: ${TARMS_MISSING[*]}"
+  warn "  TARMS tools (invoices, payments, debtor days) will be unavailable"
+  HAS_WARNINGS=1
+fi
+
+# MIS (Management Information System)
+MIS_MISSING=()
+[[ -z "$MIS_SSH_HOST" ]]     && MIS_MISSING+=("MIS_SSH_HOST")
+[[ -z "$MIS_SSH_USERNAME" ]] && MIS_MISSING+=("MIS_SSH_USERNAME")
+[[ -z "$MIS_DB_USERNAME" ]]  && MIS_MISSING+=("MIS_DB_USERNAME")
+[[ -z "$MIS_DB_PASSWORD" ]]  && MIS_MISSING+=("MIS_DB_PASSWORD")
+if [[ ${#MIS_MISSING[@]} -gt 0 ]]; then
+  warn "MIS credentials incomplete — missing: ${MIS_MISSING[*]}"
+  warn "  MIS tools (sales, products, KBB, contracts, events) will be unavailable"
+  HAS_WARNINGS=1
+fi
+
+# Brevo CRM
+if [[ -z "$BREVO_API_KEY" ]]; then
+  warn "BREVO_API_KEY not received — Brevo email/CRM tools will be unavailable"
+  HAS_WARNINGS=1
+fi
+if [[ -z "$BREVO_MCP_API_KEY" ]]; then
+  warn "BREVO_MCP_API_KEY not received — Brevo MCP contacts/deals/campaigns will be unavailable"
+  HAS_WARNINGS=1
 fi
 
 # ── SSH key (local path) ─────────────────────────────────────────────────────
@@ -191,10 +233,13 @@ MIS_SSH_KEY_PATH=""
 if [[ -f "$HOME/.ssh/turnbull" ]]; then
   TARMS_SSH_KEY_PATH="$HOME/.ssh/turnbull"
   MIS_SSH_KEY_PATH="$HOME/.ssh/turnbull"
+else
+  warn "No SSH key found at ~/.ssh/turnbull — TARMS/MIS tunnels will not work"
+  HAS_WARNINGS=1
 fi
 
-if [[ -z "$TARMS_SSH_KEY_PATH" ]]; then
-  warn "No SSH key found at ~/.ssh/turnbull — TARMS/MIS tunnels will not work"
+if [[ $HAS_WARNINGS -eq 1 ]]; then
+  printf "\n"
 fi
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -217,22 +262,22 @@ pass "MCP server built"
 ENV_FILE="$SCRIPT_DIR/.env"
 {
   echo "# Turnbull MCP — Generated $(date '+%Y-%m-%d %H:%M:%S')"
-  echo "DATABASE_URL=\"${DATABASE_URL}\""
-  echo "TARMS_SSH_HOST=\"${TARMS_SSH_HOST}\""
-  echo "TARMS_SSH_KEY_PATH=\"${TARMS_SSH_KEY_PATH}\""
-  echo "TARMS_SSH_USERNAME=\"${TARMS_SSH_USERNAME}\""
-  echo "TARMS_DB_USERNAME=\"${TARMS_DB_USERNAME}\""
-  echo "TARMS_DB_PASSWORD=\"${TARMS_DB_PASSWORD}\""
-  echo "TARMS_DB_NAME=\"${TARMS_DB_NAME}\""
-  echo "MIS_SSH_HOST=\"${MIS_SSH_HOST}\""
-  echo "MIS_SSH_KEY_PATH=\"${MIS_SSH_KEY_PATH}\""
-  echo "MIS_SSH_USERNAME=\"${MIS_SSH_USERNAME}\""
-  echo "MIS_DB_USERNAME=\"${MIS_DB_USERNAME}\""
-  echo "MIS_DB_PASSWORD=\"${MIS_DB_PASSWORD}\""
-  echo "MIS_DB_NAME=\"${MIS_DB_NAME}\""
-  echo "OPENROUTER_API_KEY=\"${OPENROUTER_API_KEY}\""
-  echo "BREVO_API_KEY=\"${BREVO_API_KEY}\""
-  echo "BREVO_MCP_API_KEY=\"${BREVO_MCP_API_KEY}\""
+  echo "DATABASE_URL='${DATABASE_URL}'"
+  echo "TARMS_SSH_HOST='${TARMS_SSH_HOST}'"
+  echo "TARMS_SSH_KEY_PATH='${TARMS_SSH_KEY_PATH}'"
+  echo "TARMS_SSH_USERNAME='${TARMS_SSH_USERNAME}'"
+  echo "TARMS_DB_USERNAME='${TARMS_DB_USERNAME}'"
+  echo "TARMS_DB_PASSWORD='${TARMS_DB_PASSWORD}'"
+  echo "TARMS_DB_NAME='${TARMS_DB_NAME}'"
+  echo "MIS_SSH_HOST='${MIS_SSH_HOST}'"
+  echo "MIS_SSH_KEY_PATH='${MIS_SSH_KEY_PATH}'"
+  echo "MIS_SSH_USERNAME='${MIS_SSH_USERNAME}'"
+  echo "MIS_DB_USERNAME='${MIS_DB_USERNAME}'"
+  echo "MIS_DB_PASSWORD='${MIS_DB_PASSWORD}'"
+  echo "MIS_DB_NAME='${MIS_DB_NAME}'"
+  echo "OPENROUTER_API_KEY='${OPENROUTER_API_KEY}'"
+  echo "BREVO_API_KEY='${BREVO_API_KEY}'"
+  echo "BREVO_MCP_API_KEY='${BREVO_MCP_API_KEY}'"
 } > "$ENV_FILE"
 
 # ── OpenCode configs ─────────────────────────────────────────────────────────
@@ -245,6 +290,7 @@ cat > "$SCRIPT_DIR/opencode.json" << OCEOF
   "\$schema": "https://opencode.ai/config.json",
   "model": "openrouter/openai/gpt-4.1-mini",
   "share": "disabled",
+  "plugin": ["opencode-scheduler"],
   "mcp": {
     "turnbull": {
       "type": "local",
@@ -333,6 +379,7 @@ cat > "$GLOBAL_CONFIG_DIR/opencode.json" << GCEOF
   "\$schema": "https://opencode.ai/config.json",
   "model": "openrouter/openai/gpt-4.1-mini",
   "share": "disabled",
+  "plugin": ["opencode-scheduler"],
   "mcp": {
     "turnbull": {
       "type": "local",

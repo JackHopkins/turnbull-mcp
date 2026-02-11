@@ -1,3 +1,8 @@
+---
+name: new-customer-check
+description: Perform a due diligence check on a newly onboarded customer or prospect using risk profile, Companies House data, officers, CCJs, and early trading patterns.
+---
+
 # New Customer Check
 
 Perform a due diligence check on a newly onboarded customer or prospect.

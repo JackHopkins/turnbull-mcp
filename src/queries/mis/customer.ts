@@ -2,15 +2,15 @@ import { misQuery } from "../../connections/mis-mysql.js";
 
 export async function searchCustomers(query: string, limit: number = 20) {
   return misQuery(
-    `SELECT c.id, c.accountNumber, c.name, c.address1, c.address2,
-            c.town, c.county, c.postcode, c.telephone, c.email,
-            c.creditTerms, c.creditLimit, c.onStop,
+    `SELECT c.id, c.account_number, c.name, c.line1, c.line2,
+            c.line3, c.line4, c.line5, c.postcode, c.phone, c.email,
+            c.creditTerms, c.credit_limit,
             b.name AS branchName,
-            r.name AS repName
+            r.fullname AS repName
      FROM customer c
      LEFT JOIN branch b ON c.branch = b.id
-     LEFT JOIN rep r ON c.rep = r.id
-     WHERE c.accountNumber LIKE ? OR c.name LIKE ? OR c.email LIKE ? OR c.postcode LIKE ?
+     LEFT JOIN repDetails r ON c.rep = r.id
+     WHERE c.account_number LIKE ? OR c.name LIKE ? OR c.email LIKE ? OR c.postcode LIKE ?
      ORDER BY c.name
      LIMIT ?`,
     [`%${query}%`, `%${query}%`, `%${query}%`, `%${query}%`, limit]
@@ -21,11 +21,11 @@ export async function getCustomerDetail(accountNumber: string) {
   const results = await misQuery(
     `SELECT c.*,
             b.name AS branchName,
-            r.name AS repName
+            r.fullname AS repName
      FROM customer c
      LEFT JOIN branch b ON c.branch = b.id
-     LEFT JOIN rep r ON c.rep = r.id
-     WHERE c.accountNumber = ?`,
+     LEFT JOIN repDetails r ON c.rep = r.id
+     WHERE c.account_number = ?`,
     [accountNumber]
   );
   return results[0] || null;
@@ -37,12 +37,15 @@ export async function getCustomerContacts(
 ) {
   const activeClause = includeInactive ? "" : "AND co.active = 1";
   return misQuery(
-    `SELECT co.id, co.firstName, co.lastName, co.email, co.telephone,
-            co.mobile, co.jobTitle, co.interests, co.brevoId,
-            co.active, co.createdAt, co.updatedAt
-     FROM contact co
+    `SELECT co.id, co.contact_number, co.firstName, co.lastName, co.fullName,
+            co.email, co.phone, co.mobile, co.contact_type,
+            co.interestBuilding, co.interestTimber, co.interestLandscaping,
+            co.interestPlumbing, co.interestKB, co.interestFibo,
+            co.brevoContactId, co.businessType,
+            co.active, co.gdpr, co.created, co.updated
+     FROM contactDetails co
      JOIN customer c ON co.customer = c.id
-     WHERE c.accountNumber = ? ${activeClause}
+     WHERE c.account_number = ? ${activeClause}
      ORDER BY co.lastName, co.firstName`,
     [accountNumber]
   );
@@ -53,11 +56,11 @@ export async function getCustomerNotes(
   limit: number = 50
 ) {
   return misQuery(
-    `SELECT n.id, n.message, n.createdAt, n.createdBy, n.type
-     FROM note n
+    `SELECT n.id, n.messageType, n.message, n.payload, n.noteDate, n.created
+     FROM customerNotes n
      JOIN customer c ON n.customer = c.id
-     WHERE c.accountNumber = ?
-     ORDER BY n.createdAt DESC
+     WHERE c.account_number = ?
+     ORDER BY n.noteDate DESC
      LIMIT ?`,
     [accountNumber, limit]
   );
@@ -72,18 +75,18 @@ export async function getCustomersByBranch(
   const offset = (page - 1) * limit;
   const allowedSorts: Record<string, string> = {
     name: "c.name",
-    accountNumber: "c.accountNumber",
-    creditLimit: "c.creditLimit",
+    accountNumber: "c.account_number",
+    creditLimit: "c.credit_limit",
   };
   const sortField = allowedSorts[sortBy] || "c.name";
 
   return misQuery(
-    `SELECT c.id, c.accountNumber, c.name, c.creditTerms, c.creditLimit,
-            c.onStop, c.email, c.telephone,
-            r.name AS repName
+    `SELECT c.id, c.account_number, c.name, c.creditTerms, c.credit_limit,
+            c.email, c.phone,
+            r.fullname AS repName
      FROM customer c
      JOIN branch b ON c.branch = b.id
-     LEFT JOIN rep r ON c.rep = r.id
+     LEFT JOIN repDetails r ON c.rep = r.id
      WHERE b.name = ?
      ORDER BY ${sortField}
      LIMIT ? OFFSET ?`,
@@ -93,8 +96,8 @@ export async function getCustomersByBranch(
 
 export async function getCustomersByRep(repId: number, limit: number = 100) {
   return misQuery(
-    `SELECT c.id, c.accountNumber, c.name, c.creditTerms, c.creditLimit,
-            c.onStop, c.email, c.telephone,
+    `SELECT c.id, c.account_number, c.name, c.creditTerms, c.credit_limit,
+            c.email, c.phone,
             b.name AS branchName
      FROM customer c
      LEFT JOIN branch b ON c.branch = b.id
@@ -107,11 +110,13 @@ export async function getCustomersByRep(repId: number, limit: number = 100) {
 
 export async function getCustomerOnboardingStatus(accountNumber: string) {
   const results = await misQuery(
-    `SELECT c.accountNumber, c.name,
-            c.onlineRegistered, c.onlineRegisteredDate,
-            c.onlineLastLogin, c.onlineEmail
+    `SELECT c.account_number, c.name,
+            ob.onboardingState, ob.email AS onboardingEmail,
+            ob.webbuilderId, ob.lastLoggedInTimestamp,
+            ob.dateInvitedTimestamp
      FROM customer c
-     WHERE c.accountNumber = ?`,
+     LEFT JOIN customeronboarding ob ON ob.customer = c.id
+     WHERE c.account_number = ?`,
     [accountNumber]
   );
   return results[0] || null;
@@ -122,12 +127,12 @@ export async function getBrevoCommsHistory(
   limit: number = 50
 ) {
   return misQuery(
-    `SELECT bc.id, bc.contactId, bc.eventType, bc.eventDate,
-            bc.subject, bc.campaignName, bc.status
-     FROM brevo_comms bc
-     JOIN customer c ON bc.customer = c.id
-     WHERE c.accountNumber = ?
-     ORDER BY bc.eventDate DESC
+    `SELECT bh.id, bh.contact, bh.sender, bh.recipient,
+            bh.webhookType, bh.message, bh.created
+     FROM brevoHistory bh
+     JOIN customer c ON bh.customer = c.id
+     WHERE c.account_number = ?
+     ORDER BY bh.created DESC
      LIMIT ?`,
     [accountNumber, limit]
   );
