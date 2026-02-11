@@ -18,7 +18,7 @@ if [[ ! -f "package.json" ]] || ! grep -q '"turnbull-mcp"' package.json 2>/dev/n
   exec "$INSTALL_DIR/install.sh"
 fi
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 
 # ── Colours ──────────────────────────────────────────────────────────────────
 RED='\033[0;31m'
