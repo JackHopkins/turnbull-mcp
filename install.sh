@@ -15,7 +15,7 @@ if [[ ! -f "package.json" ]] || ! grep -q '"turnbull-mcp"' package.json 2>/dev/n
     git clone https://github.com/JackHopkins/turnbull-mcp.git "$INSTALL_DIR"
   fi
   cd "$INSTALL_DIR"
-  exec "$INSTALL_DIR/install.sh"
+  exec "$INSTALL_DIR/install.sh" < /dev/tty
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
