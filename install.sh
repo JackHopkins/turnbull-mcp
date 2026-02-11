@@ -275,6 +275,17 @@ fi
 TARMS_SSH_KEY_PATH="$SSH_KEY_PATH"
 MIS_SSH_KEY_PATH="$SSH_KEY_PATH"
 
+# ── SSH usernames ────────────────────────────────────────────────────────────
+TARMS_DEFAULT="${TARMS_SSH_USERNAME:-paperplane}"
+printf "  ${BOLD}TARMS SSH username${NC} ${DIM}[${TARMS_DEFAULT}]${NC}: "
+read -r TARMS_INPUT
+TARMS_SSH_USERNAME="${TARMS_INPUT:-$TARMS_DEFAULT}"
+
+MIS_DEFAULT="${MIS_SSH_USERNAME:-turnbull}"
+printf "  ${BOLD}MIS SSH username${NC} ${DIM}[${MIS_DEFAULT}]${NC}: "
+read -r MIS_INPUT
+MIS_SSH_USERNAME="${MIS_INPUT:-$MIS_DEFAULT}"
+
 if [[ $HAS_WARNINGS -eq 1 ]]; then
   printf "\n"
 fi
