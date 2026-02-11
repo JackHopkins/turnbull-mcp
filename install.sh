@@ -164,16 +164,8 @@ pass "Authenticated"
 read_cred() { node -e "const c=JSON.parse(require('fs').readFileSync('$CREDS_FILE','utf-8'));console.log(c['$1']||'')"; }
 
 DATABASE_URL=$(read_cred DATABASE_URL)
-TARMS_SSH_HOST=$(read_cred TARMS_SSH_HOST)
-TARMS_SSH_USERNAME=$(read_cred TARMS_SSH_USERNAME)
-TARMS_DB_USERNAME=$(read_cred TARMS_DB_USERNAME)
-TARMS_DB_PASSWORD=$(read_cred TARMS_DB_PASSWORD)
-TARMS_DB_NAME=$(read_cred TARMS_DB_NAME)
-MIS_SSH_HOST=$(read_cred MIS_SSH_HOST)
-MIS_SSH_USERNAME=$(read_cred MIS_SSH_USERNAME)
-MIS_DB_USERNAME=$(read_cred MIS_DB_USERNAME)
-MIS_DB_PASSWORD=$(read_cred MIS_DB_PASSWORD)
-MIS_DB_NAME=$(read_cred MIS_DB_NAME)
+DB_PROXY_URL=$(read_cred DB_PROXY_URL)
+DB_PROXY_API_KEY=$(read_cred DB_PROXY_API_KEY)
 OPENROUTER_API_KEY=$(read_cred OPENROUTER_API_KEY)
 BREVO_API_KEY=$(read_cred BREVO_API_KEY)
 BREVO_MCP_API_KEY=$(read_cred BREVO_MCP_API_KEY)
@@ -193,27 +185,9 @@ if [[ -z "$OPENROUTER_API_KEY" ]]; then
   exit 1
 fi
 
-# TARMS (Kerridge ERP)
-TARMS_MISSING=()
-[[ -z "$TARMS_SSH_HOST" ]]     && TARMS_MISSING+=("TARMS_SSH_HOST")
-[[ -z "$TARMS_SSH_USERNAME" ]] && TARMS_MISSING+=("TARMS_SSH_USERNAME")
-[[ -z "$TARMS_DB_USERNAME" ]]  && TARMS_MISSING+=("TARMS_DB_USERNAME")
-[[ -z "$TARMS_DB_PASSWORD" ]]  && TARMS_MISSING+=("TARMS_DB_PASSWORD")
-if [[ ${#TARMS_MISSING[@]} -gt 0 ]]; then
-  warn "TARMS credentials incomplete — missing: ${TARMS_MISSING[*]}"
-  warn "  TARMS tools (invoices, payments, debtor days) will be unavailable"
-  HAS_WARNINGS=1
-fi
-
-# MIS (Management Information System)
-MIS_MISSING=()
-[[ -z "$MIS_SSH_HOST" ]]     && MIS_MISSING+=("MIS_SSH_HOST")
-[[ -z "$MIS_SSH_USERNAME" ]] && MIS_MISSING+=("MIS_SSH_USERNAME")
-[[ -z "$MIS_DB_USERNAME" ]]  && MIS_MISSING+=("MIS_DB_USERNAME")
-[[ -z "$MIS_DB_PASSWORD" ]]  && MIS_MISSING+=("MIS_DB_PASSWORD")
-if [[ ${#MIS_MISSING[@]} -gt 0 ]]; then
-  warn "MIS credentials incomplete — missing: ${MIS_MISSING[*]}"
-  warn "  MIS tools (sales, products, KBB, contracts, events) will be unavailable"
+# Database proxy
+if [[ -z "$DB_PROXY_URL" ]] || [[ -z "$DB_PROXY_API_KEY" ]]; then
+  warn "Database proxy credentials incomplete — MIS/TARMS tools will be unavailable"
   HAS_WARNINGS=1
 fi
 
@@ -224,17 +198,6 @@ if [[ -z "$BREVO_API_KEY" ]]; then
 fi
 if [[ -z "$BREVO_MCP_API_KEY" ]]; then
   warn "BREVO_MCP_API_KEY not received — Brevo MCP contacts/deals/campaigns will be unavailable"
-  HAS_WARNINGS=1
-fi
-
-# ── SSH key (local path) ─────────────────────────────────────────────────────
-TARMS_SSH_KEY_PATH=""
-MIS_SSH_KEY_PATH=""
-if [[ -f "$HOME/.ssh/turnbull" ]]; then
-  TARMS_SSH_KEY_PATH="$HOME/.ssh/turnbull"
-  MIS_SSH_KEY_PATH="$HOME/.ssh/turnbull"
-else
-  warn "No SSH key found at ~/.ssh/turnbull — TARMS/MIS tunnels will not work"
   HAS_WARNINGS=1
 fi
 
@@ -263,18 +226,8 @@ ENV_FILE="$SCRIPT_DIR/.env"
 {
   echo "# Turnbull MCP — Generated $(date '+%Y-%m-%d %H:%M:%S')"
   echo "DATABASE_URL='${DATABASE_URL}'"
-  echo "TARMS_SSH_HOST='${TARMS_SSH_HOST}'"
-  echo "TARMS_SSH_KEY_PATH='${TARMS_SSH_KEY_PATH}'"
-  echo "TARMS_SSH_USERNAME='${TARMS_SSH_USERNAME}'"
-  echo "TARMS_DB_USERNAME='${TARMS_DB_USERNAME}'"
-  echo "TARMS_DB_PASSWORD='${TARMS_DB_PASSWORD}'"
-  echo "TARMS_DB_NAME='${TARMS_DB_NAME}'"
-  echo "MIS_SSH_HOST='${MIS_SSH_HOST}'"
-  echo "MIS_SSH_KEY_PATH='${MIS_SSH_KEY_PATH}'"
-  echo "MIS_SSH_USERNAME='${MIS_SSH_USERNAME}'"
-  echo "MIS_DB_USERNAME='${MIS_DB_USERNAME}'"
-  echo "MIS_DB_PASSWORD='${MIS_DB_PASSWORD}'"
-  echo "MIS_DB_NAME='${MIS_DB_NAME}'"
+  echo "DB_PROXY_URL='${DB_PROXY_URL}'"
+  echo "DB_PROXY_API_KEY='${DB_PROXY_API_KEY}'"
   echo "OPENROUTER_API_KEY='${OPENROUTER_API_KEY}'"
   echo "BREVO_API_KEY='${BREVO_API_KEY}'"
   echo "BREVO_MCP_API_KEY='${BREVO_MCP_API_KEY}'"
@@ -298,18 +251,8 @@ cat > "$SCRIPT_DIR/opencode.json" << OCEOF
       "enabled": true,
       "environment": {
         "DATABASE_URL": "${DATABASE_URL}",
-        "TARMS_SSH_HOST": "${TARMS_SSH_HOST}",
-        "TARMS_SSH_KEY_PATH": "${TARMS_SSH_KEY_PATH}",
-        "TARMS_SSH_USERNAME": "${TARMS_SSH_USERNAME}",
-        "TARMS_DB_USERNAME": "${TARMS_DB_USERNAME}",
-        "TARMS_DB_PASSWORD": "${TARMS_DB_PASSWORD}",
-        "TARMS_DB_NAME": "${TARMS_DB_NAME}",
-        "MIS_SSH_HOST": "${MIS_SSH_HOST}",
-        "MIS_SSH_KEY_PATH": "${MIS_SSH_KEY_PATH}",
-        "MIS_SSH_USERNAME": "${MIS_SSH_USERNAME}",
-        "MIS_DB_USERNAME": "${MIS_DB_USERNAME}",
-        "MIS_DB_PASSWORD": "${MIS_DB_PASSWORD}",
-        "MIS_DB_NAME": "${MIS_DB_NAME}",
+        "DB_PROXY_URL": "${DB_PROXY_URL}",
+        "DB_PROXY_API_KEY": "${DB_PROXY_API_KEY}",
         "OPENROUTER_API_KEY": "${OPENROUTER_API_KEY}",
         "BREVO_API_KEY": "${BREVO_API_KEY}"
       }
@@ -387,18 +330,8 @@ cat > "$GLOBAL_CONFIG_DIR/opencode.json" << GCEOF
       "enabled": true,
       "environment": {
         "DATABASE_URL": "${DATABASE_URL}",
-        "TARMS_SSH_HOST": "${TARMS_SSH_HOST}",
-        "TARMS_SSH_KEY_PATH": "${TARMS_SSH_KEY_PATH}",
-        "TARMS_SSH_USERNAME": "${TARMS_SSH_USERNAME}",
-        "TARMS_DB_USERNAME": "${TARMS_DB_USERNAME}",
-        "TARMS_DB_PASSWORD": "${TARMS_DB_PASSWORD}",
-        "TARMS_DB_NAME": "${TARMS_DB_NAME}",
-        "MIS_SSH_HOST": "${MIS_SSH_HOST}",
-        "MIS_SSH_KEY_PATH": "${MIS_SSH_KEY_PATH}",
-        "MIS_SSH_USERNAME": "${MIS_SSH_USERNAME}",
-        "MIS_DB_USERNAME": "${MIS_DB_USERNAME}",
-        "MIS_DB_PASSWORD": "${MIS_DB_PASSWORD}",
-        "MIS_DB_NAME": "${MIS_DB_NAME}",
+        "DB_PROXY_URL": "${DB_PROXY_URL}",
+        "DB_PROXY_API_KEY": "${DB_PROXY_API_KEY}",
         "OPENROUTER_API_KEY": "${OPENROUTER_API_KEY}",
         "BREVO_API_KEY": "${BREVO_API_KEY}"
       }
