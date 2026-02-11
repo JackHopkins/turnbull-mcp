@@ -9,7 +9,7 @@ export async function proxyQuery<T = any>(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-API-Key": config.DB_PROXY_API_KEY!,
+      Authorization: `Bearer ${config.DB_PROXY_API_KEY}`,
     },
     body: JSON.stringify({ operation, params }),
   });
