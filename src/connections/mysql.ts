@@ -6,6 +6,7 @@ import net from "net";
 
 let sshClient: SSHClient | null = null;
 let mysqlPool: mysql.Pool | null = null;
+let localServer: net.Server | null = null;
 let localPort: number = 0;
 let tunnelReady = false;
 let tunnelPromise: Promise<void> | null = null;
@@ -24,6 +25,23 @@ async function findFreePort(): Promise<number> {
     });
     server.on("error", reject);
   });
+}
+
+function resetTunnel() {
+  tunnelReady = false;
+  tunnelPromise = null;
+  if (mysqlPool) {
+    mysqlPool.end().catch(() => {});
+    mysqlPool = null;
+  }
+  if (localServer) {
+    localServer.close(() => {});
+    localServer = null;
+  }
+  if (sshClient) {
+    sshClient.end();
+    sshClient = null;
+  }
 }
 
 async function setupTunnel(): Promise<void> {
@@ -46,6 +64,8 @@ async function setupTunnel(): Promise<void> {
         port: 22,
         username: config.TARMS_SSH_USERNAME!,
         readyTimeout: 10000,
+        keepaliveInterval: 15000,
+        keepaliveCountMax: 3,
       };
 
       if (config.TARMS_SSH_KEY_PATH) {
@@ -65,7 +85,7 @@ async function setupTunnel(): Promise<void> {
             }
 
             // Create a TCP server that forwards to the SSH stream
-            const server = net.createServer((sock) => {
+            localServer = net.createServer((sock) => {
               sshClient!.forwardOut(
                 "127.0.0.1",
                 localPort,
@@ -81,7 +101,7 @@ async function setupTunnel(): Promise<void> {
               );
             });
 
-            server.listen(localPort, "127.0.0.1", () => {
+            localServer.listen(localPort, "127.0.0.1", () => {
               mysqlPool = mysql.createPool({
                 host: "127.0.0.1",
                 port: localPort,
@@ -103,12 +123,23 @@ async function setupTunnel(): Promise<void> {
       });
 
       sshClient.on("error", (err) => {
-        console.error("SSH connection error:", err);
+        console.error("TARMS SSH connection error:", err);
+        resetTunnel();
         reject(err);
+      });
+
+      sshClient.on("close", () => {
+        console.error("TARMS SSH connection closed, will reconnect on next query");
+        resetTunnel();
+      });
+
+      sshClient.on("end", () => {
+        resetTunnel();
       });
 
       sshClient.connect(sshConfig);
     } catch (err) {
+      resetTunnel();
       reject(err);
     }
   });
@@ -120,26 +151,29 @@ export async function mysqlQuery<T = any>(
   sql: string,
   params?: any[]
 ): Promise<T[]> {
-  if (!tunnelReady) {
-    await setupTunnel();
-  }
-  if (!mysqlPool) {
-    throw new Error("MySQL pool not initialized");
-  }
+  for (let attempt = 0; attempt < 2; attempt++) {
+    if (!tunnelReady) {
+      await setupTunnel();
+    }
+    if (!mysqlPool) {
+      throw new Error("TARMS MySQL pool not initialized");
+    }
 
-  const [rows] = await mysqlPool.query(sql, params);
-  return rows as T[];
+    try {
+      const [rows] = await mysqlPool.query(sql, params);
+      return rows as T[];
+    } catch (err: any) {
+      if (attempt === 0 && (err.code === "ECONNRESET" || err.code === "ECONNREFUSED" || err.code === "PROTOCOL_CONNECTION_LOST" || err.code === "EPIPE")) {
+        console.error("TARMS query failed with connection error, reconnecting:", err.code);
+        resetTunnel();
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error("TARMS query failed after reconnect attempt");
 }
 
 export async function shutdownMysql(): Promise<void> {
-  if (mysqlPool) {
-    await mysqlPool.end();
-    mysqlPool = null;
-  }
-  if (sshClient) {
-    sshClient.end();
-    sshClient = null;
-  }
-  tunnelReady = false;
-  tunnelPromise = null;
+  resetTunnel();
 }
