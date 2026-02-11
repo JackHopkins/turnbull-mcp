@@ -227,16 +227,53 @@ if [[ -z "$BREVO_MCP_API_KEY" ]]; then
   HAS_WARNINGS=1
 fi
 
-# ── SSH key (local path) ─────────────────────────────────────────────────────
-TARMS_SSH_KEY_PATH=""
-MIS_SSH_KEY_PATH=""
+# ── SSH key (shared by TARMS and MIS) ────────────────────────────────────────
+SSH_KEY_PATH=""
+
+# Check default location first
 if [[ -f "$HOME/.ssh/turnbull" ]]; then
-  TARMS_SSH_KEY_PATH="$HOME/.ssh/turnbull"
-  MIS_SSH_KEY_PATH="$HOME/.ssh/turnbull"
-else
-  warn "No SSH key found at ~/.ssh/turnbull — TARMS/MIS tunnels will not work"
-  HAS_WARNINGS=1
+  SSH_KEY_PATH="$HOME/.ssh/turnbull"
+  pass "SSH key found at ~/.ssh/turnbull"
 fi
+
+# If not found, prompt the user
+if [[ -z "$SSH_KEY_PATH" ]]; then
+  printf "\n  ${BOLD}SSH Private Key${NC}\n"
+  printf "  ${DIM}An SSH key is required to connect to TARMS and MIS databases.${NC}\n"
+  printf "  ${DIM}You can enter a path to an existing key, or paste the key contents.${NC}\n\n"
+
+  printf "  ${BOLD}Enter path to SSH private key${NC} ${DIM}(or 'paste' to paste contents)${NC}: "
+  read -r SSH_INPUT
+
+  if [[ "$SSH_INPUT" == "paste" ]]; then
+    SSH_KEY_DIR="$HOME/.ssh"
+    mkdir -p "$SSH_KEY_DIR"
+    SSH_KEY_PATH="$SSH_KEY_DIR/turnbull"
+
+    printf "\n  ${DIM}Paste your private key below, then press Enter and Ctrl-D:${NC}\n"
+    KEY_CONTENTS=$(cat)
+
+    printf "%s\n" "$KEY_CONTENTS" > "$SSH_KEY_PATH"
+    chmod 600 "$SSH_KEY_PATH"
+    pass "SSH key saved to $SSH_KEY_PATH"
+  elif [[ -n "$SSH_INPUT" ]]; then
+    # Expand ~ to home directory
+    SSH_INPUT="${SSH_INPUT/#\~/$HOME}"
+    if [[ -f "$SSH_INPUT" ]]; then
+      SSH_KEY_PATH="$SSH_INPUT"
+      pass "SSH key found at $SSH_KEY_PATH"
+    else
+      warn "File not found: $SSH_INPUT — TARMS/MIS tunnels will not work"
+      HAS_WARNINGS=1
+    fi
+  else
+    warn "No SSH key provided — TARMS/MIS tunnels will not work"
+    HAS_WARNINGS=1
+  fi
+fi
+
+TARMS_SSH_KEY_PATH="$SSH_KEY_PATH"
+MIS_SSH_KEY_PATH="$SSH_KEY_PATH"
 
 if [[ $HAS_WARNINGS -eq 1 ]]; then
   printf "\n"
