@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -eo pipefail
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Turnbull MCP — Installer
@@ -15,10 +15,10 @@ if [[ ! -f "package.json" ]] || ! grep -q '"turnbull-mcp"' package.json 2>/dev/n
     git clone https://github.com/JackHopkins/turnbull-mcp.git "$INSTALL_DIR"
   fi
   cd "$INSTALL_DIR"
-  exec "$INSTALL_DIR/install.sh"
+  exec "$INSTALL_DIR/install.sh" < /dev/tty
 fi
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 
 # ── Colours ──────────────────────────────────────────────────────────────────
 RED='\033[0;31m'
@@ -169,25 +169,125 @@ TARMS_SSH_USERNAME=$(read_cred TARMS_SSH_USERNAME)
 TARMS_DB_USERNAME=$(read_cred TARMS_DB_USERNAME)
 TARMS_DB_PASSWORD=$(read_cred TARMS_DB_PASSWORD)
 TARMS_DB_NAME=$(read_cred TARMS_DB_NAME)
+MIS_SSH_HOST=$(read_cred MIS_SSH_HOST)
+MIS_SSH_USERNAME=$(read_cred MIS_SSH_USERNAME)
+MIS_DB_USERNAME=$(read_cred MIS_DB_USERNAME)
+MIS_DB_PASSWORD=$(read_cred MIS_DB_PASSWORD)
+MIS_DB_NAME=$(read_cred MIS_DB_NAME)
 OPENROUTER_API_KEY=$(read_cred OPENROUTER_API_KEY)
 BREVO_API_KEY=$(read_cred BREVO_API_KEY)
 BREVO_MCP_API_KEY=$(read_cred BREVO_MCP_API_KEY)
 
 rm -f "$CREDS_FILE"
 
+# ── Validate credentials ─────────────────────────────────────────────────────
+HAS_WARNINGS=0
+
+# Required — installer cannot continue without these
+if [[ -z "$DATABASE_URL" ]]; then
+  err "DATABASE_URL not received — PostgreSQL risk database will not work"
+  exit 1
+fi
 if [[ -z "$OPENROUTER_API_KEY" ]]; then
-  err "No OPENROUTER_API_KEY received. Ensure it is configured on the server."
+  err "OPENROUTER_API_KEY not received — LLM will not function"
   exit 1
 fi
 
-# ── SSH key (local path) ─────────────────────────────────────────────────────
-TARMS_SSH_KEY_PATH=""
-if [[ -f "$HOME/.ssh/turnbull" ]]; then
-  TARMS_SSH_KEY_PATH="$HOME/.ssh/turnbull"
+# TARMS (Kerridge ERP)
+TARMS_MISSING=()
+[[ -z "$TARMS_SSH_HOST" ]]     && TARMS_MISSING+=("TARMS_SSH_HOST")
+[[ -z "$TARMS_SSH_USERNAME" ]] && TARMS_MISSING+=("TARMS_SSH_USERNAME")
+[[ -z "$TARMS_DB_USERNAME" ]]  && TARMS_MISSING+=("TARMS_DB_USERNAME")
+[[ -z "$TARMS_DB_PASSWORD" ]]  && TARMS_MISSING+=("TARMS_DB_PASSWORD")
+if [[ ${#TARMS_MISSING[@]} -gt 0 ]]; then
+  warn "TARMS credentials incomplete — missing: ${TARMS_MISSING[*]}"
+  warn "  TARMS tools (invoices, payments, debtor days) will be unavailable"
+  HAS_WARNINGS=1
 fi
 
-if [[ -z "$TARMS_SSH_KEY_PATH" ]]; then
-  warn "No SSH key found at ~/.ssh/turnbull — TARMS tunnel will not work"
+# MIS (Management Information System)
+MIS_MISSING=()
+[[ -z "$MIS_SSH_HOST" ]]     && MIS_MISSING+=("MIS_SSH_HOST")
+[[ -z "$MIS_SSH_USERNAME" ]] && MIS_MISSING+=("MIS_SSH_USERNAME")
+[[ -z "$MIS_DB_USERNAME" ]]  && MIS_MISSING+=("MIS_DB_USERNAME")
+[[ -z "$MIS_DB_PASSWORD" ]]  && MIS_MISSING+=("MIS_DB_PASSWORD")
+if [[ ${#MIS_MISSING[@]} -gt 0 ]]; then
+  warn "MIS credentials incomplete — missing: ${MIS_MISSING[*]}"
+  warn "  MIS tools (sales, products, KBB, contracts, events) will be unavailable"
+  HAS_WARNINGS=1
+fi
+
+# Brevo CRM
+if [[ -z "$BREVO_API_KEY" ]]; then
+  warn "BREVO_API_KEY not received — Brevo email/CRM tools will be unavailable"
+  HAS_WARNINGS=1
+fi
+if [[ -z "$BREVO_MCP_API_KEY" ]]; then
+  warn "BREVO_MCP_API_KEY not received — Brevo MCP contacts/deals/campaigns will be unavailable"
+  HAS_WARNINGS=1
+fi
+
+# ── SSH key (shared by TARMS and MIS) ────────────────────────────────────────
+SSH_KEY_PATH=""
+
+# Check default location first
+if [[ -f "$HOME/.ssh/turnbull" ]]; then
+  SSH_KEY_PATH="$HOME/.ssh/turnbull"
+  pass "SSH key found at ~/.ssh/turnbull"
+fi
+
+# If not found, prompt the user
+if [[ -z "$SSH_KEY_PATH" ]]; then
+  printf "\n  ${BOLD}SSH Private Key${NC}\n"
+  printf "  ${DIM}An SSH key is required to connect to TARMS and MIS databases.${NC}\n"
+  printf "  ${DIM}You can enter a path to an existing key, or paste the key contents.${NC}\n\n"
+
+  printf "  ${BOLD}Enter path to SSH private key${NC} ${DIM}(or 'paste' to paste contents)${NC}: "
+  read -r SSH_INPUT
+
+  if [[ "$SSH_INPUT" == "paste" ]]; then
+    SSH_KEY_DIR="$HOME/.ssh"
+    mkdir -p "$SSH_KEY_DIR"
+    SSH_KEY_PATH="$SSH_KEY_DIR/turnbull"
+
+    printf "\n  ${DIM}Paste your private key below, then press Enter and Ctrl-D:${NC}\n"
+    KEY_CONTENTS=$(cat)
+
+    printf "%s\n" "$KEY_CONTENTS" > "$SSH_KEY_PATH"
+    chmod 600 "$SSH_KEY_PATH"
+    pass "SSH key saved to $SSH_KEY_PATH"
+  elif [[ -n "$SSH_INPUT" ]]; then
+    # Expand ~ to home directory
+    SSH_INPUT="${SSH_INPUT/#\~/$HOME}"
+    if [[ -f "$SSH_INPUT" ]]; then
+      SSH_KEY_PATH="$SSH_INPUT"
+      pass "SSH key found at $SSH_KEY_PATH"
+    else
+      warn "File not found: $SSH_INPUT — TARMS/MIS tunnels will not work"
+      HAS_WARNINGS=1
+    fi
+  else
+    warn "No SSH key provided — TARMS/MIS tunnels will not work"
+    HAS_WARNINGS=1
+  fi
+fi
+
+TARMS_SSH_KEY_PATH="$SSH_KEY_PATH"
+MIS_SSH_KEY_PATH="$SSH_KEY_PATH"
+
+# ── SSH usernames ────────────────────────────────────────────────────────────
+TARMS_DEFAULT="${TARMS_SSH_USERNAME:-paperplane}"
+printf "  ${BOLD}TARMS SSH username${NC} ${DIM}[${TARMS_DEFAULT}]${NC}: "
+read -r TARMS_INPUT
+TARMS_SSH_USERNAME="${TARMS_INPUT:-$TARMS_DEFAULT}"
+
+MIS_DEFAULT="${MIS_SSH_USERNAME:-turnbull}"
+printf "  ${BOLD}MIS SSH username${NC} ${DIM}[${MIS_DEFAULT}]${NC}: "
+read -r MIS_INPUT
+MIS_SSH_USERNAME="${MIS_INPUT:-$MIS_DEFAULT}"
+
+if [[ $HAS_WARNINGS -eq 1 ]]; then
+  printf "\n"
 fi
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -210,16 +310,22 @@ pass "MCP server built"
 ENV_FILE="$SCRIPT_DIR/.env"
 {
   echo "# Turnbull MCP — Generated $(date '+%Y-%m-%d %H:%M:%S')"
-  echo "DATABASE_URL=\"${DATABASE_URL}\""
-  echo "TARMS_SSH_HOST=\"${TARMS_SSH_HOST}\""
-  echo "TARMS_SSH_KEY_PATH=\"${TARMS_SSH_KEY_PATH}\""
-  echo "TARMS_SSH_USERNAME=\"${TARMS_SSH_USERNAME}\""
-  echo "TARMS_DB_USERNAME=\"${TARMS_DB_USERNAME}\""
-  echo "TARMS_DB_PASSWORD=\"${TARMS_DB_PASSWORD}\""
-  echo "TARMS_DB_NAME=\"${TARMS_DB_NAME}\""
-  echo "OPENROUTER_API_KEY=\"${OPENROUTER_API_KEY}\""
-  echo "BREVO_API_KEY=\"${BREVO_API_KEY}\""
-  echo "BREVO_MCP_API_KEY=\"${BREVO_MCP_API_KEY}\""
+  echo "DATABASE_URL='${DATABASE_URL}'"
+  echo "TARMS_SSH_HOST='${TARMS_SSH_HOST}'"
+  echo "TARMS_SSH_KEY_PATH='${TARMS_SSH_KEY_PATH}'"
+  echo "TARMS_SSH_USERNAME='${TARMS_SSH_USERNAME}'"
+  echo "TARMS_DB_USERNAME='${TARMS_DB_USERNAME}'"
+  echo "TARMS_DB_PASSWORD='${TARMS_DB_PASSWORD}'"
+  echo "TARMS_DB_NAME='${TARMS_DB_NAME}'"
+  echo "MIS_SSH_HOST='${MIS_SSH_HOST}'"
+  echo "MIS_SSH_KEY_PATH='${MIS_SSH_KEY_PATH}'"
+  echo "MIS_SSH_USERNAME='${MIS_SSH_USERNAME}'"
+  echo "MIS_DB_USERNAME='${MIS_DB_USERNAME}'"
+  echo "MIS_DB_PASSWORD='${MIS_DB_PASSWORD}'"
+  echo "MIS_DB_NAME='${MIS_DB_NAME}'"
+  echo "OPENROUTER_API_KEY='${OPENROUTER_API_KEY}'"
+  echo "BREVO_API_KEY='${BREVO_API_KEY}'"
+  echo "BREVO_MCP_API_KEY='${BREVO_MCP_API_KEY}'"
 } > "$ENV_FILE"
 
 # ── OpenCode configs ─────────────────────────────────────────────────────────
@@ -232,6 +338,7 @@ cat > "$SCRIPT_DIR/opencode.json" << OCEOF
   "\$schema": "https://opencode.ai/config.json",
   "model": "openrouter/openai/gpt-4.1-mini",
   "share": "disabled",
+  "plugin": ["opencode-scheduler"],
   "mcp": {
     "turnbull": {
       "type": "local",
@@ -245,6 +352,12 @@ cat > "$SCRIPT_DIR/opencode.json" << OCEOF
         "TARMS_DB_USERNAME": "${TARMS_DB_USERNAME}",
         "TARMS_DB_PASSWORD": "${TARMS_DB_PASSWORD}",
         "TARMS_DB_NAME": "${TARMS_DB_NAME}",
+        "MIS_SSH_HOST": "${MIS_SSH_HOST}",
+        "MIS_SSH_KEY_PATH": "${MIS_SSH_KEY_PATH}",
+        "MIS_SSH_USERNAME": "${MIS_SSH_USERNAME}",
+        "MIS_DB_USERNAME": "${MIS_DB_USERNAME}",
+        "MIS_DB_PASSWORD": "${MIS_DB_PASSWORD}",
+        "MIS_DB_NAME": "${MIS_DB_NAME}",
         "OPENROUTER_API_KEY": "${OPENROUTER_API_KEY}",
         "BREVO_API_KEY": "${BREVO_API_KEY}"
       }
@@ -275,6 +388,26 @@ cat > "$SCRIPT_DIR/opencode.json" << OCEOF
       "description": "Account manager for tracking customer relationships and transaction patterns",
       "mode": "all",
       "prompt": "{file:$SCRIPT_DIR/.opencode/agents/sales-account-manager.md}"
+    },
+    "kbb-manager": {
+      "description": "Kitchen & Bathroom design sales manager for pipeline, designer performance, and lead analysis",
+      "mode": "all",
+      "prompt": "{file:$SCRIPT_DIR/.opencode/agents/kbb-manager.md}"
+    },
+    "branch-manager": {
+      "description": "Branch operations manager for performance tracking, staff management, and customer portfolios",
+      "mode": "all",
+      "prompt": "{file:$SCRIPT_DIR/.opencode/agents/branch-manager.md}"
+    },
+    "pricing-manager": {
+      "description": "Contract pricing and margin optimization specialist",
+      "mode": "all",
+      "prompt": "{file:$SCRIPT_DIR/.opencode/agents/pricing-manager.md}"
+    },
+    "marketing-manager": {
+      "description": "Events, rewards, and CRM integration manager",
+      "mode": "all",
+      "prompt": "{file:$SCRIPT_DIR/.opencode/agents/marketing-manager.md}"
     }
   },
   "instructions": [
@@ -294,6 +427,7 @@ cat > "$GLOBAL_CONFIG_DIR/opencode.json" << GCEOF
   "\$schema": "https://opencode.ai/config.json",
   "model": "openrouter/openai/gpt-4.1-mini",
   "share": "disabled",
+  "plugin": ["opencode-scheduler"],
   "mcp": {
     "turnbull": {
       "type": "local",
@@ -307,6 +441,12 @@ cat > "$GLOBAL_CONFIG_DIR/opencode.json" << GCEOF
         "TARMS_DB_USERNAME": "${TARMS_DB_USERNAME}",
         "TARMS_DB_PASSWORD": "${TARMS_DB_PASSWORD}",
         "TARMS_DB_NAME": "${TARMS_DB_NAME}",
+        "MIS_SSH_HOST": "${MIS_SSH_HOST}",
+        "MIS_SSH_KEY_PATH": "${MIS_SSH_KEY_PATH}",
+        "MIS_SSH_USERNAME": "${MIS_SSH_USERNAME}",
+        "MIS_DB_USERNAME": "${MIS_DB_USERNAME}",
+        "MIS_DB_PASSWORD": "${MIS_DB_PASSWORD}",
+        "MIS_DB_NAME": "${MIS_DB_NAME}",
         "OPENROUTER_API_KEY": "${OPENROUTER_API_KEY}",
         "BREVO_API_KEY": "${BREVO_API_KEY}"
       }
@@ -337,6 +477,26 @@ cat > "$GLOBAL_CONFIG_DIR/opencode.json" << GCEOF
       "description": "Account manager for tracking customer relationships and transaction patterns",
       "mode": "all",
       "prompt": "{file:$GLOBAL_CONFIG_DIR/.opencode/agents/sales-account-manager.md}"
+    },
+    "kbb-manager": {
+      "description": "Kitchen & Bathroom design sales manager for pipeline, designer performance, and lead analysis",
+      "mode": "all",
+      "prompt": "{file:$GLOBAL_CONFIG_DIR/.opencode/agents/kbb-manager.md}"
+    },
+    "branch-manager": {
+      "description": "Branch operations manager for performance tracking, staff management, and customer portfolios",
+      "mode": "all",
+      "prompt": "{file:$GLOBAL_CONFIG_DIR/.opencode/agents/branch-manager.md}"
+    },
+    "pricing-manager": {
+      "description": "Contract pricing and margin optimization specialist",
+      "mode": "all",
+      "prompt": "{file:$GLOBAL_CONFIG_DIR/.opencode/agents/pricing-manager.md}"
+    },
+    "marketing-manager": {
+      "description": "Events, rewards, and CRM integration manager",
+      "mode": "all",
+      "prompt": "{file:$GLOBAL_CONFIG_DIR/.opencode/agents/marketing-manager.md}"
     }
   },
   "instructions": [

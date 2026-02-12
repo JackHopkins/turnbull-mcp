@@ -1,3 +1,8 @@
+---
+name: overdue-chase
+description: Generate a prioritized list of overdue customers for payment chasing with outstanding invoices, payment history, and suggested actions.
+---
+
 # Overdue Chase
 
 Generate a prioritized list of overdue customers for payment chasing.

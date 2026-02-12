@@ -1,3 +1,8 @@
+---
+name: daily-risk-report
+description: Generate a daily risk portfolio summary for the credit control team with unreviewed alerts, risk distribution, and AI analysis.
+---
+
 # Daily Risk Report
 
 Generate a daily risk portfolio summary for the credit control team.

@@ -1,3 +1,8 @@
+---
+name: customer-review
+description: Generate a comprehensive risk review for a customer account combining risk metrics, debtor analysis, transaction history, Companies House data, and AI narrative.
+---
+
 # Customer Review
 
 Generate a comprehensive risk review for a customer account.

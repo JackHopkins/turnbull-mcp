@@ -1,7 +1,7 @@
 import { Client as SSHClient } from "ssh2";
 import mysql from "mysql2/promise";
 import { readFileSync } from "fs";
-import { getConfig, hasTarmsConfig } from "../config.js";
+import { getConfig, hasMisConfig } from "../config.js";
 import net from "net";
 
 let sshClient: SSHClient | null = null;
@@ -51,25 +51,28 @@ async function setupTunnel(): Promise<void> {
   tunnelPromise = new Promise<void>(async (resolve, reject) => {
     try {
       const config = getConfig();
-      if (!hasTarmsConfig()) {
-        reject(new Error("TARMS SSH configuration not available"));
+      if (!hasMisConfig()) {
+        reject(new Error("MIS SSH configuration not available"));
         return;
       }
 
       localPort = await findFreePort();
       sshClient = new SSHClient();
 
+      const sshKeyPath =
+        config.MIS_SSH_KEY_PATH || config.TARMS_SSH_KEY_PATH;
+
       const sshConfig: any = {
-        host: config.TARMS_SSH_HOST,
+        host: config.MIS_SSH_HOST,
         port: 22,
-        username: config.TARMS_SSH_USERNAME!,
+        username: config.MIS_SSH_USERNAME || "turnbull",
         readyTimeout: 10000,
         keepaliveInterval: 15000,
         keepaliveCountMax: 3,
       };
 
-      if (config.TARMS_SSH_KEY_PATH) {
-        sshConfig.privateKey = readFileSync(config.TARMS_SSH_KEY_PATH);
+      if (sshKeyPath) {
+        sshConfig.privateKey = readFileSync(sshKeyPath);
       }
 
       sshClient.on("ready", () => {
@@ -105,9 +108,9 @@ async function setupTunnel(): Promise<void> {
               mysqlPool = mysql.createPool({
                 host: "127.0.0.1",
                 port: localPort,
-                user: config.TARMS_DB_USERNAME!,
-                password: config.TARMS_DB_PASSWORD!,
-                database: config.TARMS_DB_NAME,
+                user: config.MIS_DB_USERNAME || "mis",
+                password: config.MIS_DB_PASSWORD || "",
+                database: config.MIS_DB_NAME,
                 waitForConnections: true,
                 connectionLimit: 5,
                 queueLimit: 0,
@@ -123,13 +126,13 @@ async function setupTunnel(): Promise<void> {
       });
 
       sshClient.on("error", (err) => {
-        console.error("TARMS SSH connection error:", err);
+        console.error("MIS SSH connection error:", err);
         resetTunnel();
         reject(err);
       });
 
       sshClient.on("close", () => {
-        console.error("TARMS SSH connection closed, will reconnect on next query");
+        console.error("MIS SSH connection closed, will reconnect on next query");
         resetTunnel();
       });
 
@@ -147,7 +150,7 @@ async function setupTunnel(): Promise<void> {
   return tunnelPromise;
 }
 
-export async function mysqlQuery<T = any>(
+export async function misQuery<T = any>(
   sql: string,
   params?: any[]
 ): Promise<T[]> {
@@ -156,7 +159,7 @@ export async function mysqlQuery<T = any>(
       await setupTunnel();
     }
     if (!mysqlPool) {
-      throw new Error("TARMS MySQL pool not initialized");
+      throw new Error("MIS MySQL pool not initialized");
     }
 
     try {
@@ -164,16 +167,16 @@ export async function mysqlQuery<T = any>(
       return rows as T[];
     } catch (err: any) {
       if (attempt === 0 && (err.code === "ECONNRESET" || err.code === "ECONNREFUSED" || err.code === "PROTOCOL_CONNECTION_LOST" || err.code === "EPIPE")) {
-        console.error("TARMS query failed with connection error, reconnecting:", err.code);
+        console.error("MIS query failed with connection error, reconnecting:", err.code);
         resetTunnel();
         continue;
       }
       throw err;
     }
   }
-  throw new Error("TARMS query failed after reconnect attempt");
+  throw new Error("MIS query failed after reconnect attempt");
 }
 
-export async function shutdownMysql(): Promise<void> {
+export async function shutdownMis(): Promise<void> {
   resetTunnel();
 }

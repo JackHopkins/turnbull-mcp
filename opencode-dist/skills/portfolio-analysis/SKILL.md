@@ -1,3 +1,8 @@
+---
+name: portfolio-analysis
+description: Generate a comprehensive portfolio-level risk analysis with rating distribution, exposure rankings, overdue rankings, and AI assessment.
+---
+
 # Portfolio Analysis
 
 Generate a comprehensive portfolio-level risk analysis, optionally filtered by branch or account manager.
