@@ -338,7 +338,7 @@ cat > "$SCRIPT_DIR/opencode.json" << OCEOF
   "\$schema": "https://opencode.ai/config.json",
   "model": "openrouter/openai/gpt-4.1-mini",
   "share": "disabled",
-  "plugin": ["opencode-scheduler"],
+  "plugin": ["opencode-scheduler@1.2.0", "opencode-agent-memory@0.1.0"],
   "mcp": {
     "turnbull": {
       "type": "local",
@@ -427,7 +427,7 @@ cat > "$GLOBAL_CONFIG_DIR/opencode.json" << GCEOF
   "\$schema": "https://opencode.ai/config.json",
   "model": "openrouter/openai/gpt-4.1-mini",
   "share": "disabled",
-  "plugin": ["opencode-scheduler"],
+  "plugin": ["opencode-scheduler@1.2.0", "opencode-agent-memory@0.1.0"],
   "mcp": {
     "turnbull": {
       "type": "local",
