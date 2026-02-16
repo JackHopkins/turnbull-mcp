@@ -54,19 +54,27 @@ printf "${NC}\n${BOLD}  MCP Installer${NC}\n\n"
 # Prerequisites
 # ═════════════════════════════════════════════════════════════════════════════
 
-if [[ "$(uname)" != "Darwin" ]]; then
-  err "macOS required. Detected: $(uname)"
+if [[ "$(uname -s)" == *"MINGW"* ]] || [[ "$(uname -s)" == *"MSYS"* ]]; then
+  err "Windows detected. Please use install.ps1 instead."
   exit 1
 fi
 
 if ! command -v node &>/dev/null; then
-  err "Node.js is not installed. Run: brew install node"
+  if [[ "$(uname)" == "Darwin" ]]; then
+    err "Node.js is not installed. Run: brew install node"
+  else
+    err "Node.js is not installed. Install from https://nodejs.org/"
+  fi
   exit 1
 fi
 
 NODE_VERSION=$(node -v | sed 's/v//' | cut -d. -f1)
 if [[ "$NODE_VERSION" -lt 18 ]]; then
-  err "Node.js >= 18 required. Found: $(node -v). Run: brew upgrade node"
+  if [[ "$(uname)" == "Darwin" ]]; then
+    err "Node.js >= 18 required. Found: $(node -v). Run: brew upgrade node"
+  else
+    err "Node.js >= 18 required. Found: $(node -v). Install from https://nodejs.org/"
+  fi
   exit 1
 fi
 
