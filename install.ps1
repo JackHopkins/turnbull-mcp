@@ -14,6 +14,11 @@ $ErrorActionPreference = "Stop"
 # Self-bootstrap — clone repo if not already inside it
 # ─────────────────────────────────────────────────────────────────────────────
 
+if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+    Write-Host "Git is not installed. Install with: winget install Git.Git  or  https://git-scm.com" -ForegroundColor Red
+    exit 1
+}
+
 $InRepo = $false
 if (Test-Path "package.json") {
     $pkg = Get-Content "package.json" -Raw
