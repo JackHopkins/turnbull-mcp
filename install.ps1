@@ -14,9 +14,37 @@ $ErrorActionPreference = "Stop"
 # Self-bootstrap — clone repo if not already inside it
 # ─────────────────────────────────────────────────────────────────────────────
 
+# ── Helper: refresh PATH from registry (picks up new installs) ────────────
+function Refresh-Path {
+    $machinePath = [Environment]::GetEnvironmentVariable("Path", "Machine")
+    $userPath    = [Environment]::GetEnvironmentVariable("Path", "User")
+    $env:PATH    = "$machinePath;$userPath"
+}
+
+function Install-WithWinget {
+    param([string]$PackageId, [string]$DisplayName, [string]$ManualUrl)
+    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+        Write-Host "  x  $DisplayName is not installed and winget is not available." -ForegroundColor Red
+        Write-Host "     Install manually from $ManualUrl" -ForegroundColor Red
+        exit 1
+    }
+    Write-Host "  *  Installing $DisplayName via winget..." -NoNewline
+    winget install --id $PackageId --accept-source-agreements --accept-package-agreements --silent | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host ""
+        Write-Host "  x  Failed to install $DisplayName. Install manually from $ManualUrl" -ForegroundColor Red
+        exit 1
+    }
+    Refresh-Path
+    Write-Host "`r$(' ' * 80)`r  +  $DisplayName installed"
+}
+
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
-    Write-Host "Git is not installed. Install with: winget install Git.Git  or  https://git-scm.com" -ForegroundColor Red
-    exit 1
+    Install-WithWinget -PackageId "Git.Git" -DisplayName "Git" -ManualUrl "https://git-scm.com"
+    if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+        Write-Host "  x  Git was installed but is not in PATH. Please restart your terminal and re-run the installer." -ForegroundColor Red
+        exit 1
+    }
 }
 
 $InRepo = $false
@@ -85,13 +113,16 @@ if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
 
 # Node.js >= 18
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
-    Err "Node.js is not installed. Install with: winget install OpenJS.NodeJS.LTS  or  https://nodejs.org/"
-    exit 1
+    Install-WithWinget -PackageId "OpenJS.NodeJS.LTS" -DisplayName "Node.js" -ManualUrl "https://nodejs.org/"
+    if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+        Err "Node.js was installed but is not in PATH. Please restart your terminal and re-run the installer."
+        exit 1
+    }
 }
 
 $NodeVersion = (node -v) -replace '^v', '' -split '\.' | Select-Object -First 1
 if ([int]$NodeVersion -lt 18) {
-    Err "Node.js >= 18 required. Found: $(node -v). Install from https://nodejs.org/"
+    Err "Node.js >= 18 required. Found: $(node -v). Run: winget upgrade OpenJS.NodeJS.LTS"
     exit 1
 }
 
