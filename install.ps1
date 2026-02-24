@@ -469,7 +469,8 @@ $ProjectConfig = @"
         "MIS_DB_PASSWORD": "$MIS_DB_PASSWORD",
         "MIS_DB_NAME": "$MIS_DB_NAME",
         "OPENROUTER_API_KEY": "$OPENROUTER_API_KEY",
-        "BREVO_API_KEY": "$BREVO_API_KEY"
+        "BREVO_API_KEY": "$BREVO_API_KEY",
+        "KBBCONNECT_API_TOKEN": "$KBBCONNECT_API_TOKEN"
       }
     },
     "brevo_contacts": {
@@ -559,7 +560,8 @@ $GlobalConfig = @"
         "MIS_DB_PASSWORD": "$MIS_DB_PASSWORD",
         "MIS_DB_NAME": "$MIS_DB_NAME",
         "OPENROUTER_API_KEY": "$OPENROUTER_API_KEY",
-        "BREVO_API_KEY": "$BREVO_API_KEY"
+        "BREVO_API_KEY": "$BREVO_API_KEY",
+        "KBBCONNECT_API_TOKEN": "$KBBCONNECT_API_TOKEN"
       }
     },
     "brevo_contacts": {
