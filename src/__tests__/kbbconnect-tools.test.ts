@@ -67,7 +67,7 @@ describe("kbbConnectTools", () => {
 
       const tool = findTool("kbb_search_jobs");
       await tool.handler({
-        customer: "Smith",
+        dwgno: "63890",
         ccrdate_from: "01/01/2025",
         orderby: "ORDERNO DESC",
         skip: 0,
@@ -76,7 +76,7 @@ describe("kbbConnectTools", () => {
       });
 
       const [, params] = mockedKbbGet.mock.calls[0];
-      expect(params!.$filter).toContain("(CUSTOMER containing 'Smith')");
+      expect(params!.$filter).toContain("(DWGNO containing '63890')");
       expect(params!.$filter).toContain("CCRDATE>'01/01/2025'");
     });
 

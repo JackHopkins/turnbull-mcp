@@ -17,11 +17,10 @@ export const kbbConnectTools: ToolDefinition[] = [
   {
     name: "kbb_search_jobs",
     description:
-      "Search KBBConnect jobs. Filter by drawing number, order number, customer, salesperson, date ranges, or raw OData filter. All date params use MM/DD/YYYY format. Returns paged results.",
+      "Search KBBConnect jobs. Filter by drawing number, order number, salesperson, date ranges, or raw OData filter. All date params use MM/DD/YYYY format. Returns paged results.",
     inputSchema: z.object({
       dwgno: z.string().optional().describe("Drawing number to search for (partial match)"),
       orderno: z.string().optional().describe("Order number to search for (partial match)"),
-      customer: z.string().optional().describe("Customer name to search for (partial match)"),
       salesid: z.string().optional().describe("Filter by user/salesperson ID (SALESID, partial match) e.g. '90'"),
       filter: z.string().optional().describe("Raw OData filter expression e.g. \"STATUS eq 'LIVE'\""),
       ccrdate_from: z.string().optional().describe("Jobs created after this date, MM/DD/YYYY"),
@@ -41,7 +40,7 @@ export const kbbConnectTools: ToolDefinition[] = [
     }),
     handler: async (params) => {
       const {
-        dwgno, orderno, customer, salesid, filter,
+        dwgno, orderno, salesid, filter,
         ccrdate_from, ccrdate_to, deldate_from, deldate_to,
         surdate_from, surdate_to, insdate_from, insdate_to,
         estsolddate_from, estsolddate_to,
@@ -51,7 +50,6 @@ export const kbbConnectTools: ToolDefinition[] = [
       const parts: string[] = [];
       if (dwgno) parts.push(`(DWGNO containing '${dwgno}')`);
       if (orderno) parts.push(`(ORDERNO containing '${orderno}')`);
-      if (customer) parts.push(`(CUSTOMER containing '${customer}')`);
       if (salesid) parts.push(`(SALESID containing '${salesid}')`);
       if (filter) parts.push(`(${filter})`);
       if (ccrdate_from) parts.push(`CCRDATE>'${ccrdate_from}'`);
