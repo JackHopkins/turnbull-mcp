@@ -13,6 +13,7 @@ import { misKbbTools } from "./mis-kbb.js";
 import { misEventsTools } from "./mis-events.js";
 import { misAnalyticsTools } from "./mis-analytics.js";
 import { misStaffTools } from "./mis-staff.js";
+import { kbbConnectTools } from "./kbbconnect.js";
 
 export interface ToolDefinition {
   name: string;
@@ -36,6 +37,7 @@ export const allTools: ToolDefinition[] = [
   ...misEventsTools,
   ...misAnalyticsTools,
   ...misStaffTools,
+  ...kbbConnectTools,
 ];
 
 export function getToolByName(name: string): ToolDefinition | undefined {

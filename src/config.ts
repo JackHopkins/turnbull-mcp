@@ -25,6 +25,9 @@ const envSchema = z.object({
 
   // Brevo
   BREVO_API_KEY: z.string().optional(),
+
+  // KBBConnect
+  KBBCONNECT_API_TOKEN: z.string().optional(),
 });
 
 export type Config = z.infer<typeof envSchema>;
@@ -54,4 +57,8 @@ export function hasOpenRouterConfig(): boolean {
 
 export function hasBrevoConfig(): boolean {
   return !!getConfig().BREVO_API_KEY;
+}
+
+export function hasKbbConnectConfig(): boolean {
+  return !!getConfig().KBBCONNECT_API_TOKEN;
 }

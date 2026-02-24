@@ -265,6 +265,7 @@ $MIS_DB_NAME        = if ($Creds.MIS_DB_NAME)        { $Creds.MIS_DB_NAME }     
 $OPENROUTER_API_KEY = if ($Creds.OPENROUTER_API_KEY) { $Creds.OPENROUTER_API_KEY } else { "" }
 $BREVO_API_KEY      = if ($Creds.BREVO_API_KEY)      { $Creds.BREVO_API_KEY }      else { "" }
 $BREVO_MCP_API_KEY  = if ($Creds.BREVO_MCP_API_KEY)  { $Creds.BREVO_MCP_API_KEY }  else { "" }
+$KBBCONNECT_API_TOKEN = if ($Creds.KBBCONNECT_API_TOKEN) { $Creds.KBBCONNECT_API_TOKEN } else { "" }
 
 Remove-Item $CredsFile -Force -ErrorAction SilentlyContinue
 
@@ -427,6 +428,7 @@ MIS_DB_NAME='$MIS_DB_NAME'
 OPENROUTER_API_KEY='$OPENROUTER_API_KEY'
 BREVO_API_KEY='$BREVO_API_KEY'
 BREVO_MCP_API_KEY='$BREVO_MCP_API_KEY'
+KBBCONNECT_API_TOKEN='$KBBCONNECT_API_TOKEN'
 "@
 Set-Content -Path $EnvFile -Value $EnvContent -Encoding UTF8
 

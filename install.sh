@@ -185,6 +185,7 @@ MIS_DB_NAME=$(read_cred MIS_DB_NAME)
 OPENROUTER_API_KEY=$(read_cred OPENROUTER_API_KEY)
 BREVO_API_KEY=$(read_cred BREVO_API_KEY)
 BREVO_MCP_API_KEY=$(read_cred BREVO_MCP_API_KEY)
+KBBCONNECT_API_TOKEN=$(read_cred KBBCONNECT_API_TOKEN)
 
 rm -f "$CREDS_FILE"
 
@@ -334,6 +335,7 @@ ENV_FILE="$SCRIPT_DIR/.env"
   echo "OPENROUTER_API_KEY='${OPENROUTER_API_KEY}'"
   echo "BREVO_API_KEY='${BREVO_API_KEY}'"
   echo "BREVO_MCP_API_KEY='${BREVO_MCP_API_KEY}'"
+  echo "KBBCONNECT_API_TOKEN='${KBBCONNECT_API_TOKEN}'"
 } > "$ENV_FILE"
 
 # ── OpenCode configs ─────────────────────────────────────────────────────────
