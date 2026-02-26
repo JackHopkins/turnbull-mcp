@@ -44,6 +44,31 @@ Additional rules:
 - If a dataset has **>500 rows**, add a note above the table: "Showing all N rows — consider filtering or aggregating for faster load"
 - **Skip empty datasets** — don't render empty charts or tables
 
+### 2.5. Plan thinkylinks
+
+For each dataset/section in the dashboard, generate 1-3 contextual drill-down prompts — **natural language questions** that a user might want to ask next, based on the data they're seeing. These will be rendered as clickable buttons that send queries to OpenCode.
+
+Examples of good thinkylinks:
+
+| Dashboard section | Button text | Prompt sent to OpenCode |
+|-------------------|-------------|------------------------|
+| Branch comparison table showing North £142k vs South £98k | "Compare North vs South" | "Compare sales, margin, and customer counts between Branch North (£142,300 MTD) and Branch South (£98,450 MTD) for 2026-01-01 to 2026-02-26, broken down by week" |
+| Top 10 customers row for "Acme Ltd (ACC-7823)" | "Deep dive: Acme Ltd" | "/customer-deep-dive ACC-7823" |
+| Risk distribution showing 12 customers rated E/F | "List high-risk customers" | "List all 12 customers currently rated E or F with their balances, DBT, and most recent alert" |
+| KBB pipeline showing 8 jobs in quote stage | "Show stalled quotes" | "Show the 8 KBB jobs currently in quote stage — which have been waiting more than 14 days?" |
+| Weekly trend showing £45k→£31k drop w/c 2026-02-10→17 | "Investigate this drop" | "Analyse what caused the revenue drop from £45,200 (w/c 10 Feb) to £31,100 (w/c 17 Feb), breaking down by branch and product category" |
+| Expiring contracts showing 5 due within 7 days | "Draft renewal outreach" | "Draft renewal call talking points for the 5 contracts expiring by 2026-03-05: [list the actual customer names/IDs from the table]" |
+
+**Critical:** Every prompt must use the exact IDs, values, names, and dates from the data rendered in the dashboard — never generic placeholders. The agent populates these at generation time from the inline `DATA_N` arrays.
+
+Rules for generating thinkylinks:
+- Place them **inline near the relevant data** (below a table, beside a KPI card, in a chart caption)
+- The visible text should be short and action-oriented ("Drill down", "Compare branches", "Investigate decline")
+- The prompt should be specific and reference the actual data values/names from the dashboard
+- Use skills (e.g. `/customer-deep-dive ABC001`) when a matching skill exists; use free-form prompts otherwise
+- Generate 1-3 per section; skip sections where no meaningful drill-down exists
+- Don't generate thinkylinks that would just repeat what's already shown
+
 ### 3. Generate the HTML file
 
 Build a complete self-contained HTML file using the template below. Inline all data as JavaScript constants (`const DATA_0 = [...]`). Do not use any external data files.
@@ -94,6 +119,28 @@ Use the following structure as the base. Replace all `{{placeholders}}` with act
     .kpi-label { font-size: 0.85rem; color: #6c757d; text-transform: uppercase; letter-spacing: 0.05em; }
     .chart-container { min-height: 320px; }
     .ag-theme-quartz { width: 100%; }
+
+    /* ThinkyLinks */
+    .thinkylink {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      padding: 0.3rem 0.75rem; margin: 0.25rem 0.15rem;
+      font-size: 0.8rem; font-weight: 500;
+      color: #4361ee; background: #eef1ff; border: 1px solid #c5cdf8;
+      border-radius: 2rem; cursor: pointer; transition: all 0.15s;
+      text-decoration: none; white-space: nowrap;
+    }
+    .thinkylink:hover { background: #dce1ff; border-color: #4361ee; }
+    .thinkylink:disabled { opacity: 0.5; cursor: wait; }
+    .thinkylink::before { content: '→'; font-weight: 700; }
+    .thinkylink[data-status="sent"] { color: #198754; background: #e8f5e9; border-color: #a5d6a7; }
+    .thinkylink[data-status="sent"]::before { content: '✓'; }
+    .thinkylink[data-status="error"] { color: #dc3545; background: #fdecea; border-color: #f5c6cb; }
+    .thinkylink[data-status="error"]::before { content: '!'; }
+    .thinkylink-bar { display: flex; flex-wrap: wrap; margin-top: 0.5rem; }
+    #thinkylink-status { position: fixed; bottom: 1rem; right: 1rem; z-index: 1050;
+      padding: 0.5rem 1rem; border-radius: 0.5rem; font-size: 0.8rem; display: none; }
+    #thinkylink-status.connected { display: block; background: #e8f5e9; color: #198754; }
+    #thinkylink-status.disconnected { display: block; background: #fdecea; color: #dc3545; }
   </style>
 </head>
 <body>
@@ -166,6 +213,8 @@ Use the following structure as the base. Replace all `{{placeholders}}` with act
       </div>
     </div>
     -->
+
+    <div id="thinkylink-status"></div>
 
   </div>
 
@@ -286,6 +335,56 @@ Use the following structure as the base. Replace all `{{placeholders}}` with act
     //   mode: 'markers',
     //   marker: { size: 8, color: '#4361ee' }
     // }], { ...LAYOUT_BASE, title: { text: 'Scatter', x: 0.02, xanchor: 'left' } });
+
+    // ============================================================
+    // THINKYLINKS — drill-down queries to OpenCode
+    // ============================================================
+    const OC = { base: 'http://localhost:4096', session: null, alive: false };
+
+    // Health check on load — show/hide thinkylinks based on OpenCode availability
+    (async () => {
+      try {
+        const r = await fetch(`${OC.base}/global/health`, { signal: AbortSignal.timeout(2000) });
+        OC.alive = r.ok;
+      } catch { OC.alive = false; }
+      const el = document.getElementById('thinkylink-status');
+      if (el) {
+        el.className = OC.alive ? 'connected' : 'disconnected';
+        el.textContent = OC.alive ? 'OpenCode connected' : 'OpenCode not running — start with: opencode serve';
+        el.style.display = 'block';
+        if (OC.alive) setTimeout(() => el.style.display = 'none', 3000);
+      }
+      document.querySelectorAll('.thinkylink').forEach(b => { b.style.display = OC.alive ? '' : 'none'; });
+    })();
+
+    async function thinkylink(el) {
+      if (!OC.alive) return;
+      const prompt = el.dataset.prompt;
+      const orig = el.textContent;
+      el.disabled = true;
+      el.textContent = 'Sending…';
+      try {
+        if (!OC.session) {
+          const r = await fetch(`${OC.base}/session`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title: 'Dashboard drill-down' })
+          });
+          OC.session = (await r.json()).id;
+        }
+        await fetch(`${OC.base}/session/${OC.session}/message`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ parts: [{ type: 'text', text: prompt }] })
+        });
+        el.textContent = 'Sent — check OpenCode';
+        el.dataset.status = 'sent';
+      } catch (e) {
+        el.textContent = orig;
+        el.dataset.status = 'error';
+        el.title = 'Failed to reach OpenCode';
+      } finally {
+        el.disabled = false;
+      }
+    }
   </script>
 </body>
 </html>
@@ -354,3 +453,38 @@ Derive the topic slug from the data content — use lowercase, hyphen-separated 
 - **Empty dataset**: Skip it entirely — don't render an empty chart or table
 - **Mixed data sources**: Group related datasets together (e.g. all risk data in one tab, all sales in another)
 - **Single metric values**: Render as KPI cards, not as a 1-row table
+
+## ThinkyLinks (Drill-Down Actions)
+
+When generating the dashboard, add contextual drill-down buttons that let users
+explore data further via OpenCode. These appear as small pill-shaped buttons near
+the relevant data.
+
+### How to add a thinkylink
+
+```html
+<div class="thinkylink-bar">
+  <button class="thinkylink" data-prompt="THE OPENCODE QUERY" onclick="thinkylink(this)">
+    Button Label
+  </button>
+</div>
+```
+
+### Placement rules
+
+- Place a `<div class="thinkylink-bar">` below each table or chart card
+- Generate 1-3 thinkylinks per section based on what a user would naturally want to explore next
+- The `data-prompt` should be a specific, actionable query referencing actual values from the data
+- Use skill invocations when a matching skill exists (e.g. `/customer-deep-dive ABC001`)
+- Use free-form natural language prompts when no skill matches
+- Skip sections where no meaningful drill-down exists
+- Thinkylinks auto-hide when OpenCode is not running — so always include them
+
+### Prompt quality guidelines
+
+- **Use exact IDs and values from the rendered data** — every thinkylink must reference the real entity ID, account number, branch name, or value that appears in the adjacent table/chart. Never use placeholder or example IDs.
+- Reference specific data points: "Compare Branch North (£142,300) vs Branch South (£98,450) revenue" — using the actual values from the table
+- Include time ranges that match the data: "...for 2026-01-01 to 2026-02-26" using the actual date range from the query
+- For customer drill-downs, use the exact account ID from the row: `data-prompt="/customer-deep-dive CUST12345"` where CUST12345 is the real ID shown in that table row
+- For branch comparisons, name the exact branches from the data
+- For trend investigation, reference the exact dates/weeks and values where the trend occurs
