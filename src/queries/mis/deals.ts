@@ -26,7 +26,7 @@ export async function getBrevoDealData(
     params.push(kerridgeUserId);
   }
   if (createdSince) {
-    conditions.push("d.brevoDealCreatedDate >= ?");
+    conditions.push("d.created >= ?");
     params.push(createdSince);
   }
 
@@ -96,7 +96,7 @@ export async function getBrevoDealsByUser(
     params.push(pipeline);
   }
   if (createdSince) {
-    conditions.push("d.brevoDealCreatedDate >= ?");
+    conditions.push("d.created >= ?");
     params.push(createdSince);
   }
 
@@ -136,7 +136,7 @@ export async function getBrevoDealsByCustomer(
     params.push(stage);
   }
   if (createdSince) {
-    conditions.push("d.brevoDealCreatedDate >= ?");
+    conditions.push("d.created >= ?");
     params.push(createdSince);
   }
 
